@@ -327,6 +327,41 @@ jobs:
             GIT_COMMIT=${{ env.GIT_COMMIT }}
             DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
 
+      - name: Apply auth runtime environment
+        shell: bash
+        run: |
+          az containerapp update \
+            --name auth-service \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --set-env-vars \
+              SPRING_DATASOURCE_URL=secretref:auth-db-url \
+              SPRING_DATASOURCE_USERNAME=secretref:auth-db-username \
+              SPRING_DATASOURCE_PASSWORD=secretref:auth-db-password \
+              APP_JWT_SECRET=secretref:jwt-secret \
+              RABBITMQ_HOST=secretref:rabbitmq-host \
+              RABBITMQ_USERNAME=secretref:rabbitmq-user \
+              RABBITMQ_PASSWORD=secretref:rabbitmq-password \
+              SPRING_MAIL_USERNAME=secretref:mail-username \
+              SPRING_MAIL_PASSWORD=secretref:mail-password \
+              "JAVA_TOOL_OPTIONS=-javaagent:/opt/applicationinsights-agent.jar -XX:MaxRAMPercentage=75.0" \
+              SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
+              SPRING_FLYWAY_ENABLED=true \
+              SPRING_FLYWAY_BASELINE_ON_MIGRATE=true \
+              SPRING_JPA_SHOW_SQL=false \
+              MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=never \
+              SPRING_CACHE_TYPE=redis \
+              SPRING_DATA_REDIS_HOST=secretref:redis-host \
+              SPRING_DATA_REDIS_PORT=6379 \
+              MANAGEMENT_HEALTH_REDIS_ENABLED=true \
+              OTEL_SERVICE_NAME=auth-service \
+              "OTEL_RESOURCE_ATTRIBUTES=service.name=auth-service,service.version=${APP_VERSION},deployment.environment=${DEPLOY_ENVIRONMENT},service.instance.id=${{ github.run_id }}" \
+              "APPLICATIONINSIGHTS_CONNECTION_STRING=${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}" \
+              APPLICATIONINSIGHTS_ROLE_NAME=auth-service \
+              APPLICATIONINSIGHTS_ROLE_INSTANCE=${{ github.run_id }} \
+              APP_VERSION="${APP_VERSION}" \
+              GIT_COMMIT="${GIT_COMMIT}" \
+              DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT}"
+
   # ============================================================
   # 2. SCHOLARSHIP SERVICE (JAVA)
   # ============================================================
@@ -405,6 +440,41 @@ jobs:
             GIT_COMMIT=${{ env.GIT_COMMIT }}
             DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
 
+      - name: Apply scholarship runtime environment
+        shell: bash
+        run: |
+          az containerapp update \
+            --name scholarship-service \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --set-env-vars \
+              SPRING_DATASOURCE_URL=secretref:scholarship-db-url \
+              SPRING_DATASOURCE_USERNAME=secretref:scholarship-db-username \
+              SPRING_DATASOURCE_PASSWORD=secretref:scholarship-db-password \
+              JWT_SECRET=secretref:jwt-secret \
+              RABBITMQ_HOST=secretref:rabbitmq-host \
+              RABBITMQ_USERNAME=secretref:rabbitmq-user \
+              RABBITMQ_PASSWORD=secretref:rabbitmq-password \
+              AUTH_SERVICE_URL=secretref:auth-service-url \
+              MATCHING_SERVICE_URL=secretref:matching-service-url \
+              "JAVA_TOOL_OPTIONS=-javaagent:/opt/applicationinsights-agent.jar -XX:MaxRAMPercentage=75.0" \
+              SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
+              SPRING_FLYWAY_ENABLED=true \
+              SPRING_FLYWAY_BASELINE_ON_MIGRATE=true \
+              SPRING_JPA_SHOW_SQL=false \
+              MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=never \
+              SPRING_CACHE_TYPE=redis \
+              SPRING_DATA_REDIS_HOST=secretref:redis-host \
+              SPRING_DATA_REDIS_PORT=6379 \
+              MANAGEMENT_HEALTH_REDIS_ENABLED=true \
+              OTEL_SERVICE_NAME=scholarship-service \
+              "OTEL_RESOURCE_ATTRIBUTES=service.name=scholarship-service,service.version=${APP_VERSION},deployment.environment=${DEPLOY_ENVIRONMENT},service.instance.id=${{ github.run_id }}" \
+              "APPLICATIONINSIGHTS_CONNECTION_STRING=${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}" \
+              APPLICATIONINSIGHTS_ROLE_NAME=scholarship-service \
+              APPLICATIONINSIGHTS_ROLE_INSTANCE=${{ github.run_id }} \
+              APP_VERSION="${APP_VERSION}" \
+              GIT_COMMIT="${GIT_COMMIT}" \
+              DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT}"
+
   # ============================================================
   # 3. CHAT SERVICE (JAVA)
   # ============================================================
@@ -479,6 +549,37 @@ jobs:
             GIT_COMMIT=${{ env.GIT_COMMIT }}
             DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
 
+      - name: Apply chat runtime environment
+        shell: bash
+        run: |
+          az containerapp update \
+            --name chat-service \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --set-env-vars \
+              SPRING_DATASOURCE_URL=secretref:chat-db-url \
+              SPRING_DATASOURCE_USERNAME=secretref:chat-db-username \
+              SPRING_DATASOURCE_PASSWORD=secretref:chat-db-password \
+              JWT_SECRET=secretref:jwt-secret \
+              RABBITMQ_HOST=secretref:rabbitmq-host \
+              RABBITMQ_USERNAME=secretref:rabbitmq-user \
+              RABBITMQ_PASSWORD=secretref:rabbitmq-password \
+              AUTH_SERVICE_URL=secretref:auth-service-url \
+              APP_FIREBASE_ENABLED=false \
+              "JAVA_TOOL_OPTIONS=-javaagent:/opt/applicationinsights-agent.jar -XX:MaxRAMPercentage=75.0" \
+              SPRING_JPA_HIBERNATE_DDL_AUTO=validate \
+              SPRING_FLYWAY_ENABLED=true \
+              SPRING_FLYWAY_BASELINE_ON_MIGRATE=true \
+              SPRING_JPA_SHOW_SQL=false \
+              MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=never \
+              OTEL_SERVICE_NAME=chat-service \
+              "OTEL_RESOURCE_ATTRIBUTES=service.name=chat-service,service.version=${APP_VERSION},deployment.environment=${DEPLOY_ENVIRONMENT},service.instance.id=${{ github.run_id }}" \
+              "APPLICATIONINSIGHTS_CONNECTION_STRING=${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}" \
+              APPLICATIONINSIGHTS_ROLE_NAME=chat-service \
+              APPLICATIONINSIGHTS_ROLE_INSTANCE=${{ github.run_id }} \
+              APP_VERSION="${APP_VERSION}" \
+              GIT_COMMIT="${GIT_COMMIT}" \
+              DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT}"
+
   # ============================================================
   # 4. MATCHING SERVICE (PYTHON) - CẤU HÌNH ĐẶC BIỆT
   # ============================================================
@@ -536,6 +637,31 @@ jobs:
             GIT_COMMIT=${{ env.GIT_COMMIT }}
             DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
 
+      - name: Apply matching runtime environment
+        shell: bash
+        run: |
+          az containerapp update \
+            --name matching-service \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --set-env-vars \
+              DATABASE_URL=secretref:matching-db-url \
+              RABBITMQ_HOST=secretref:rabbitmq-host \
+              RABBITMQ_USER=secretref:rabbitmq-user \
+              RABBITMQ_PASSWORD=secretref:rabbitmq-password \
+              JWT_SECRET=secretref:jwt-secret \
+              JWT_ALGORITHM=HS256 \
+              CELERY_BROKER_URL=secretref:celery-broker-url \
+              CELERY_RESULT_BACKEND=rpc:// \
+              DEBUG=false \
+              RUN_MIGRATIONS=true \
+              AUTO_CREATE_TABLES=false \
+              OTEL_SERVICE_NAME=matching-service \
+              "OTEL_RESOURCE_ATTRIBUTES=service.name=matching-service,service.version=${APP_VERSION},deployment.environment=${DEPLOY_ENVIRONMENT},service.instance.id=${{ github.run_id }}" \
+              "APPLICATIONINSIGHTS_CONNECTION_STRING=${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}" \
+              APP_VERSION="${APP_VERSION}" \
+              GIT_COMMIT="${GIT_COMMIT}" \
+              DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT}"
+
   # ============================================================
   # 5. FRONTEND (NEXT.JS)
   # ============================================================
@@ -586,6 +712,17 @@ jobs:
             GIT_COMMIT=${{ env.GIT_COMMIT }}
             DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
 
+      - name: Apply frontend runtime environment
+        shell: bash
+        run: |
+          az containerapp update \
+            --name frontend-app \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --set-env-vars \
+              APP_VERSION="${APP_VERSION}" \
+              GIT_COMMIT="${GIT_COMMIT}" \
+              DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT}"
+
   # ============================================================
   # 6. NGINX GATEWAY
   # ============================================================
@@ -626,6 +763,17 @@ jobs:
             APP_VERSION=${{ env.APP_VERSION }}
             GIT_COMMIT=${{ env.GIT_COMMIT }}
             DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
+
+      - name: Apply nginx runtime environment
+        shell: bash
+        run: |
+          az containerapp update \
+            --name nginx-gateway \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --set-env-vars \
+              APP_VERSION="${APP_VERSION}" \
+              GIT_COMMIT="${GIT_COMMIT}" \
+              DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT}"
 
   # ============================================================
   # 8. SMOKE TEST STAGING
