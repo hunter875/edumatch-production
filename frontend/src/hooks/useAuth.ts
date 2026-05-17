@@ -1,28 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useCurrentUser } from './useApi'; // Hook của bạn
-import { UserProfile, UserRole } from '@/types'; // Vẫn import UserProfile và UserRole
+import { User, UserProfile, UserRole } from '@/types'; // Vẫn import UserProfile và UserRole
 import api from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query'; 
 
-// ĐỊNH NGHĨA CÁC TYPE BỊ THIẾU TẠI ĐÂY
-export interface User {
-  id: string;
-  email: string;
-  role: UserRole;
-  status: string; 
-  subscriptionType: string;
-  emailVerified: boolean;
-  createdAt: Date; 
-  updatedAt: Date; 
-  profile?: UserProfile | null;
-}
-
 export interface AuthState {
   user: User | null;
-  profile: UserProfile | null;
+  profile: Partial<UserProfile> | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  role: UserRole | null;
+  role: UserRole | string | null;
 }
 // KẾT THÚC PHẦN ĐỊNH NGHĨA
 
@@ -78,9 +65,10 @@ export const useAuth = (): UseAuthReturn => {
     const user: User = {
       id: profile.id,
       email: profile.email || '', 
+      name: [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.email || 'User',
       role: profile.role || UserRole.USER,
-      status: 'ACTIVE' as any,
-      subscriptionType: 'FREE' as any,
+      status: 'ACTIVE',
+      subscriptionType: 'FREE',
       emailVerified: profile.verified || false,
       createdAt: profile.createdAt, 
       updatedAt: profile.updatedAt, 
@@ -172,7 +160,7 @@ export const useAuth = (): UseAuthReturn => {
   };
 
   const hasAnyRole = (roles: UserRole[]): boolean => {
-    return authState.role ? roles.includes(authState.role) : false;
+    return authState.role ? roles.includes(authState.role as UserRole) : false;
   };
 
 

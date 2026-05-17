@@ -6,10 +6,10 @@ import { User, UserProfile, UserRole } from '@/types';
 
 interface AuthContextType {
   user: User | null;
-  profile: UserProfile | null;
+  profile: Partial<UserProfile> | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  role: UserRole | null;
+  role: UserRole | string | null;
   login: (token: string, user: User) => void;
   logout: () => void;
   updateUser: (user: Partial<User>) => void;
