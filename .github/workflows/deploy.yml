@@ -767,13 +767,24 @@ jobs:
       - name: Apply nginx runtime environment
         shell: bash
         run: |
+          AUTH_SERVICE_HOST="$(az containerapp show --name auth-service --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
+          SCHOLARSHIP_SERVICE_HOST="$(az containerapp show --name scholarship-service --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
+          CHAT_SERVICE_HOST="$(az containerapp show --name chat-service --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
+          MATCHING_SERVICE_HOST="$(az containerapp show --name matching-service --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
+          FRONTEND_HOST="$(az containerapp show --name frontend-app --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
+
           az containerapp update \
             --name nginx-gateway \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --set-env-vars \
               APP_VERSION="${APP_VERSION}" \
               GIT_COMMIT="${GIT_COMMIT}" \
-              DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT}"
+              DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT}" \
+              AUTH_SERVICE_HOST="${AUTH_SERVICE_HOST}" \
+              SCHOLARSHIP_SERVICE_HOST="${SCHOLARSHIP_SERVICE_HOST}" \
+              CHAT_SERVICE_HOST="${CHAT_SERVICE_HOST}" \
+              MATCHING_SERVICE_HOST="${MATCHING_SERVICE_HOST}" \
+              FRONTEND_HOST="${FRONTEND_HOST}"
 
   # ============================================================
   # 8. SMOKE TEST STAGING
@@ -848,7 +859,13 @@ jobs:
           [[ "$CHAT_DEPLOYED" == "true" ]] && smoke chat-service /api/health
           [[ "$MATCHING_DEPLOYED" == "true" ]] && smoke matching-service /health
           [[ "$FRONTEND_DEPLOYED" == "true" ]] && smoke frontend-app /
-          [[ "$NGINX_DEPLOYED" == "true" ]] && smoke nginx-gateway /gateway/health
+          if [[ "$NGINX_DEPLOYED" == "true" ]]; then
+            smoke nginx-gateway /gateway/health
+            smoke nginx-gateway /api/auth/health
+            smoke nginx-gateway /debug/health
+            smoke nginx-gateway /api/health
+            smoke nginx-gateway /health
+          fi
 
   # ============================================================
   # 9. MANUAL ROLLBACK
