@@ -200,6 +200,8 @@ export default function UsersManagement() {
       status: user.enabled ? t('adminUsers.statusActive') : t('adminUsers.statusInactive'),
       joinDate: user.createdAt ? new Date(user.createdAt).toISOString().split('T')[0] : '',
       avatar: nameInitials,
+      applications: 0,
+      scholarships: 0,
       rawUser: user
     };
   });

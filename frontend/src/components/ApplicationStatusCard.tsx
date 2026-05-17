@@ -86,7 +86,7 @@ export function ApplicationStatusCard({
   };
 
   const statusConfig = getStatusConfig(status?.status);
-  const lastUpdated = status?.updatedAt || submittedAt;
+  const lastUpdated = status?.updatedAt || submittedAtString;
 
   return (
     <Card className="w-full border-0 bg-gradient-to-br from-white to-blue-50/20 shadow-lg hover:shadow-xl transition-all duration-300">

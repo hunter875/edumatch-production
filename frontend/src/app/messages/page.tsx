@@ -89,7 +89,8 @@ export default function MessagesPage() {
     
     // 1. Optimistic UI - Show message immediately
     const optimisticMessage: Message = {
-      id: tempId as any,
+      id: tempId,
+      conversationId: selectedConversation.conversationId,
       content: content,
       senderId: parseInt(user.id),
       receiverId: receiverId,
@@ -133,7 +134,7 @@ export default function MessagesPage() {
     } catch (error) {
       console.error('❌ Error sending message:', error);
       // Remove optimistic message on error
-      setChatMessages(prev => prev.filter(m => m.id !== tempId));
+      setChatMessages(prev => prev.filter(m => String(m.id) !== tempId));
     } finally {
       setIsSending(false);
     }

@@ -9,6 +9,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useMessageStore } from '@/stores/realtimeStore';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
+import { UserDirectory } from '@/components/UserDirectory';
+import { ChatWindow } from '@/components/ChatWindow';
 
 export function MessagingWidget() {
   const { user, isAuthenticated } = useAuth();

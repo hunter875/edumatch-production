@@ -217,6 +217,8 @@ export interface AdminScholarship {
   description?: string;
   amount?: number;
   type?: string;
+  provider?: string;
+  deadline?: string;
   status?: string;
   moderationStatus?: string;
   applicationDeadline?: string;
@@ -233,13 +235,20 @@ export interface AdminApplication {
   applicantUserId: number;
   applicantUserName?: string;
   applicantEmail?: string;
+  studentName?: string;
+  studentEmail?: string;
   opportunityId: number;
+  scholarship?: string;
+  provider?: string;
+  amount?: number | string;
   opportunityTitle?: string; // Thêm title của opportunity
   status: string;
   gpa?: number;
   coverLetter?: string;
   motivation?: string;
   phone?: string;
+  submittedDate?: string;
+  documents?: number | string | unknown[];
   submittedAt?: string; // Dùng submittedAt thay vì createdAt
   createdAt?: string;
   updatedAt?: string;

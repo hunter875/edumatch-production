@@ -84,13 +84,23 @@ export interface AuthUser {
   id: string;
   email: string;
   name: string;
-  role: UserRole;
+  role: UserRole | string;
   profile?: Partial<UserProfile>;
   emailVerified: boolean;
   status: 'ACTIVE' | 'SUSPENDED' | 'PENDING';
   subscriptionType: 'FREE' | 'PREMIUM' | 'ENTERPRISE';
   createdAt: Date;
   updatedAt: Date;
+}
+
+export type User = AuthUser;
+
+export interface AuthState {
+  user: AuthUser | null;
+  profile: Partial<UserProfile> | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  role: UserRole | string | null;
 }
 
 /**
@@ -234,6 +244,21 @@ export interface Notification {
   createdAt: Date;
 }
 
+export type ToastType = 'success' | 'error' | 'warning' | 'info';
+
+export interface ToastProps {
+  id: string;
+  title?: string;
+  message: string;
+  type: ToastType;
+  duration?: number;
+}
+
+export interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
 // =============================================================================
 // CÁC TYPE PHỤ (Dùng cho API, Auth,...)
 // =============================================================================
@@ -335,9 +360,11 @@ export interface ScholarshipFilters {
 export interface Message {
   id: string;
   content: string;
-  senderId: string;
-  conversationId: string;
-  createdAt: Date;
+  senderId: string | number;
+  receiverId?: string | number;
+  conversationId: string | number;
+  createdAt?: Date;
+  sentAt?: string;
   attachments?: { url: string; type: string }[];
 }
 

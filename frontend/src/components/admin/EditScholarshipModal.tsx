@@ -8,13 +8,17 @@ import { ScholarshipType } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 interface ScholarshipData {
-  id: string;
+  id: string | number;
   title: string;
-  amount: string;
-  type: string;
-  deadline: string;
-  provider: string;
-  status: string;
+  amount?: string | number;
+  type?: string;
+  deadline?: string;
+  provider?: string;
+  status?: string;
+  applicationDeadline?: string;
+  university?: string;
+  location?: string;
+  description?: string;
 }
 
 interface EditScholarshipModalProps {
@@ -50,12 +54,12 @@ export function EditScholarshipModal({ isOpen, onClose, onSubmit, scholarship }:
     if (scholarship) {
       setFormData({
         title: scholarship.title,
-        amount: scholarship.amount.replace(/[$,]/g, ''),
+        amount: String(scholarship.amount || '').replace(/[$,]/g, ''),
         type: scholarship.type as ScholarshipType || ScholarshipType.UNDERGRADUATE,
-        deadline: scholarship.deadline,
-        university: scholarship.provider,
-        location: 'United States',
-        description: `Editing scholarship: ${scholarship.title}`,
+        deadline: scholarship.deadline || scholarship.applicationDeadline || '',
+        university: scholarship.university || scholarship.provider || '',
+        location: scholarship.location || 'United States',
+        description: scholarship.description || `Editing scholarship: ${scholarship.title}`,
       });
     }
   }, [scholarship]);

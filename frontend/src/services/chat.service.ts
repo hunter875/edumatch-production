@@ -35,7 +35,7 @@ export interface Conversation {
 }
 
 export interface Message {
-  id: number;
+  id: number | string;
   conversationId: number;
   senderId: number;
   receiverId?: number;
