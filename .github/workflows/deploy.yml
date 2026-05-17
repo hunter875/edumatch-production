@@ -767,10 +767,6 @@ jobs:
       - name: Apply nginx runtime environment
         shell: bash
         run: |
-          AUTH_SERVICE_HOST="$(az containerapp show --name auth-service --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
-          SCHOLARSHIP_SERVICE_HOST="$(az containerapp show --name scholarship-service --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
-          CHAT_SERVICE_HOST="$(az containerapp show --name chat-service --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
-          MATCHING_SERVICE_HOST="$(az containerapp show --name matching-service --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
           FRONTEND_HOST="$(az containerapp show --name frontend-app --resource-group "$AZURE_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn -o tsv)"
 
           az containerapp update \
@@ -780,10 +776,6 @@ jobs:
               APP_VERSION="${APP_VERSION}" \
               GIT_COMMIT="${GIT_COMMIT}" \
               DEPLOY_ENVIRONMENT="${DEPLOY_ENVIRONMENT}" \
-              AUTH_SERVICE_HOST="${AUTH_SERVICE_HOST}" \
-              SCHOLARSHIP_SERVICE_HOST="${SCHOLARSHIP_SERVICE_HOST}" \
-              CHAT_SERVICE_HOST="${CHAT_SERVICE_HOST}" \
-              MATCHING_SERVICE_HOST="${MATCHING_SERVICE_HOST}" \
               FRONTEND_HOST="${FRONTEND_HOST}"
 
   # ============================================================
