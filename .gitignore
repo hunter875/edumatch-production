@@ -1,0 +1,95 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Java / Maven
+target/
+**/target/
+*.class
+
+# Frontend build output
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage/
+htmlcov/
+.venv/
+venv/
+env/
+
+# Temporary / local QA output
+tmp/
+temp/
+.tmp/
+.tmp-*/
+.tmp-edge-qc/
+test-results/
+playwright-report/
+.playwright/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.pid.lock
+*.seed
+
+# OS / editor
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker local overrides
+docker-compose.override.yml
+
+# Local databases / dumps
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.bak
+
+# Local uploads and generated media
+uploads/
+**/uploads/
+
+# Sensitive credentials
+backend-java/chat-service/src/main/resources/firebase-adminsdk-key.json
+backend-java/chat-service/firebase-adminsdk-key.json
+*.pem
+*.key
+*.p12
+*.jks

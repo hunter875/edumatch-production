@@ -1,0 +1,52 @@
+name: Provision EduMatch Observability
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      appInsightsResourceId:
+        description: 'Application Insights resource id'
+        required: true
+        type: string
+      actionGroupResourceIds:
+        description: 'JSON array of action group resource ids, or []'
+        required: true
+        default: '[]'
+        type: string
+
+env:
+  AZURE_RESOURCE_GROUP: EduMatch-RG
+
+jobs:
+  provision-observability:
+    name: Deploy workbook and alert rules
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy observability Bicep
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          az deployment group create \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/azure/observability.bicep \
+            --parameters \
+              appInsightsResourceId='${{ inputs.appInsightsResourceId }}' \
+              environment='${{ inputs.environment }}' \
+              actionGroupResourceIds='${{ inputs.actionGroupResourceIds }}'

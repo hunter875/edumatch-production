@@ -1,0 +1,858 @@
+name: Build and Deploy EduMatch System
+
+on:
+  push:
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Select operation'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - rollback
+      service:
+        description: 'Select service to deploy manually'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - auth-service
+          - scholarship-service
+          - chat-service
+          - matching-service
+          - frontend
+          - nginx
+      environment:
+        description: 'Select deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+      revision:
+        description: 'Optional target revision name for rollback of one service'
+        required: false
+        type: string
+
+env:
+  AZURE_RESOURCE_GROUP: EduMatch-RG
+  ACR_LOGIN_SERVER: edumatchacr.azurecr.io
+  DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+  APP_VERSION: ${{ github.sha }}
+  GIT_COMMIT: ${{ github.sha }}
+
+concurrency:
+  group: deploy-${{ github.ref }}-${{ github.event.inputs.service || 'auto' }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================
+  # 0. DETECT CHANGED SERVICES
+  # ============================================================
+  detect-changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    outputs:
+      auth: ${{ steps.filter.outputs.auth }}
+      scholarship: ${{ steps.filter.outputs.scholarship }}
+      chat: ${{ steps.filter.outputs.chat }}
+      matching: ${{ steps.filter.outputs.matching }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      nginx: ${{ steps.filter.outputs.nginx }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect service path changes
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            auth:
+              - 'backend-java/auth-service/**'
+            scholarship:
+              - 'backend-java/scholarship-service/**'
+            chat:
+              - 'backend-java/chat-service/**'
+            matching:
+              - 'matching-service/**'
+            frontend:
+              - 'frontend/**'
+            nginx:
+              - 'nginx-gateway/**'
+
+  # ============================================================
+  # 1. VALIDATE BEFORE DEPLOY
+  # ============================================================
+  validate:
+    name: Validate before deploy
+    if: ${{ github.event_name == 'push' || github.event.inputs.operation == 'deploy' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required GitHub secrets
+        env:
+          AZURE_CREDENTIALS_VALUE: ${{ secrets.AZURE_CREDENTIALS }}
+          REGISTRY_USERNAME_VALUE: ${{ secrets.REGISTRY_USERNAME }}
+          REGISTRY_PASSWORD_VALUE: ${{ secrets.REGISTRY_PASSWORD }}
+          APPLICATIONINSIGHTS_CONNECTION_STRING_VALUE: ${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$AZURE_CREDENTIALS_VALUE" || { echo "Missing GitHub secret: AZURE_CREDENTIALS"; exit 1; }
+          test -n "$REGISTRY_USERNAME_VALUE" || { echo "Missing GitHub secret: REGISTRY_USERNAME"; exit 1; }
+          test -n "$REGISTRY_PASSWORD_VALUE" || { echo "Missing GitHub secret: REGISTRY_PASSWORD"; exit 1; }
+          test -n "$APPLICATIONINSIGHTS_CONNECTION_STRING_VALUE" || { echo "Missing GitHub secret: APPLICATIONINSIGHTS_CONNECTION_STRING"; exit 1; }
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: matching-service/requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Test auth-service
+        run: |
+          cd backend-java/auth-service
+          sed -i 's/\r$//' mvnw
+          chmod +x mvnw
+          ./mvnw test -B
+
+      - name: Test scholarship-service
+        run: |
+          cd backend-java/scholarship-service
+          sed -i 's/\r$//' mvnw
+          chmod +x mvnw
+          ./mvnw test -B
+
+      - name: Test chat-service
+        run: |
+          cd backend-java/chat-service
+          sed -i 's/\r$//' mvnw
+          chmod +x mvnw
+          ./mvnw test -B
+
+      - name: Validate matching-service
+        run: |
+          cd matching-service
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt pytest ruff
+          python -m compileall app tests
+          ruff check app tests --select E9,F63,F7,F82
+          pytest -q
+
+      - name: Validate frontend
+        env:
+          NEXT_PUBLIC_API_GATEWAY: http://localhost:18080
+          NEXT_PUBLIC_API_URL: http://localhost:18080
+          NEXT_PUBLIC_SOCKET_URL: ws://localhost:18080/api/ws
+        run: |
+          cd frontend
+          npm ci
+          npm run type-check
+          npm run lint
+          npm run build
+
+  # ============================================================
+  # 1B. PREFLIGHT CLOUD SECRETS
+  # ============================================================
+  preflight-cloud:
+    name: Preflight cloud secrets
+    if: ${{ github.event_name == 'push' || github.event.inputs.operation == 'deploy' }}
+    needs: [validate, detect-changes]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+    env:
+      AUTH_REQUIRED: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy' && (github.event.inputs.service == 'all' || github.event.inputs.service == 'auth-service')) || (github.event_name == 'push' && needs.detect-changes.outputs.auth == 'true') }}
+      SCHOLARSHIP_REQUIRED: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy' && (github.event.inputs.service == 'all' || github.event.inputs.service == 'scholarship-service')) || (github.event_name == 'push' && needs.detect-changes.outputs.scholarship == 'true') }}
+      CHAT_REQUIRED: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy' && (github.event.inputs.service == 'all' || github.event.inputs.service == 'chat-service')) || (github.event_name == 'push' && needs.detect-changes.outputs.chat == 'true') }}
+      MATCHING_REQUIRED: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy' && (github.event.inputs.service == 'all' || github.event.inputs.service == 'matching-service')) || (github.event_name == 'push' && needs.detect-changes.outputs.matching == 'true') }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Check Azure Container App secret references
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          check_app_secrets() {
+            local app="$1"
+            shift
+            echo "Checking secrets for $app"
+
+            local existing
+            existing="$(az containerapp secret list \
+              --name "$app" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query "[].name" \
+              -o tsv)"
+
+            for secret_name in "$@"; do
+              if ! grep -Fxq "$secret_name" <<< "$existing"; then
+                echo "Missing Azure Container App secret '$secret_name' on '$app'"
+                exit 1
+              fi
+            done
+          }
+
+          if [[ "$AUTH_REQUIRED" == "true" ]]; then
+            check_app_secrets auth-service \
+              auth-db-url auth-db-username auth-db-password \
+              jwt-secret rabbitmq-host rabbitmq-user rabbitmq-password \
+              redis-host mail-username mail-password
+          fi
+
+          if [[ "$SCHOLARSHIP_REQUIRED" == "true" ]]; then
+            check_app_secrets scholarship-service \
+              scholarship-db-url scholarship-db-username scholarship-db-password \
+              jwt-secret rabbitmq-host rabbitmq-user rabbitmq-password \
+              redis-host auth-service-url matching-service-url
+          fi
+
+          if [[ "$CHAT_REQUIRED" == "true" ]]; then
+            check_app_secrets chat-service \
+              chat-db-url chat-db-username chat-db-password \
+              jwt-secret rabbitmq-host rabbitmq-user rabbitmq-password \
+              auth-service-url
+          fi
+
+          if [[ "$MATCHING_REQUIRED" == "true" ]]; then
+            check_app_secrets matching-service \
+              matching-db-url rabbitmq-host rabbitmq-user rabbitmq-password \
+              jwt-secret celery-broker-url
+          fi
+
+  # ============================================================
+  # 1. AUTH SERVICE (JAVA)
+  # ============================================================
+  deploy-auth:
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy' && (github.event.inputs.service == 'all' || github.event.inputs.service == 'auth-service')) || (github.event_name == 'push' && needs.detect-changes.outputs.auth == 'true') }}
+    needs: [validate, detect-changes, preflight-cloud]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: |
+          cd backend-java/auth-service
+          chmod +x mvnw || true
+          ./mvnw clean package -DskipTests
+
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build & Push Docker Image
+        run: |
+          cd backend-java/auth-service
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/auth-service:${{ github.sha }} .
+          docker push ${{ env.ACR_LOGIN_SERVER }}/auth-service:${{ github.sha }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: auth-service
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.ACR_LOGIN_SERVER }}/auth-service:${{ github.sha }}
+          # Java cần giới hạn RAM để không bị OOM Killed
+          environmentVariables: |
+            SPRING_DATASOURCE_URL=secretref:auth-db-url
+            SPRING_DATASOURCE_USERNAME=secretref:auth-db-username
+            SPRING_DATASOURCE_PASSWORD=secretref:auth-db-password
+            APP_JWT_SECRET=secretref:jwt-secret
+            RABBITMQ_HOST=secretref:rabbitmq-host
+            RABBITMQ_USERNAME=secretref:rabbitmq-user
+            RABBITMQ_PASSWORD=secretref:rabbitmq-password
+            SPRING_MAIL_USERNAME=secretref:mail-username
+            SPRING_MAIL_PASSWORD=secretref:mail-password
+            JAVA_TOOL_OPTIONS=-javaagent:/opt/applicationinsights-agent.jar -XX:MaxRAMPercentage=75.0
+            SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+            SPRING_FLYWAY_ENABLED=true
+            SPRING_FLYWAY_BASELINE_ON_MIGRATE=true
+            SPRING_JPA_SHOW_SQL=false
+            MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=never
+            SPRING_CACHE_TYPE=redis
+            SPRING_DATA_REDIS_HOST=secretref:redis-host
+            SPRING_DATA_REDIS_PORT=6379
+            MANAGEMENT_HEALTH_REDIS_ENABLED=true
+            OTEL_SERVICE_NAME=auth-service
+            OTEL_RESOURCE_ATTRIBUTES=service.name=auth-service,service.version=${{ env.APP_VERSION }},deployment.environment=${{ env.DEPLOY_ENVIRONMENT }},service.instance.id=${{ github.run_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}
+            APPLICATIONINSIGHTS_ROLE_NAME=auth-service
+            APPLICATIONINSIGHTS_ROLE_INSTANCE=${{ github.run_id }}
+            APP_VERSION=${{ env.APP_VERSION }}
+            GIT_COMMIT=${{ env.GIT_COMMIT }}
+            DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
+
+  # ============================================================
+  # 2. SCHOLARSHIP SERVICE (JAVA)
+  # ============================================================
+  deploy-scholarship:
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy' && (github.event.inputs.service == 'all' || github.event.inputs.service == 'scholarship-service')) || (github.event_name == 'push' && needs.detect-changes.outputs.scholarship == 'true') }}
+    needs: [validate, detect-changes, preflight-cloud]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: |
+          cd backend-java/scholarship-service
+          chmod +x mvnw || true
+          ./mvnw clean package -DskipTests
+
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build & Push Docker Image
+        run: |
+          cd backend-java/scholarship-service
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/scholarship-service:${{ github.sha }} .
+          docker push ${{ env.ACR_LOGIN_SERVER }}/scholarship-service:${{ github.sha }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: scholarship-service
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.ACR_LOGIN_SERVER }}/scholarship-service:${{ github.sha }}
+          environmentVariables: |
+            SPRING_DATASOURCE_URL=secretref:scholarship-db-url
+            SPRING_DATASOURCE_USERNAME=secretref:scholarship-db-username
+            SPRING_DATASOURCE_PASSWORD=secretref:scholarship-db-password
+            JWT_SECRET=secretref:jwt-secret
+            RABBITMQ_HOST=secretref:rabbitmq-host
+            RABBITMQ_USERNAME=secretref:rabbitmq-user
+            RABBITMQ_PASSWORD=secretref:rabbitmq-password
+            AUTH_SERVICE_URL=secretref:auth-service-url
+            MATCHING_SERVICE_URL=secretref:matching-service-url
+            JAVA_TOOL_OPTIONS=-javaagent:/opt/applicationinsights-agent.jar -XX:MaxRAMPercentage=75.0
+            SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+            SPRING_FLYWAY_ENABLED=true
+            SPRING_FLYWAY_BASELINE_ON_MIGRATE=true
+            SPRING_JPA_SHOW_SQL=false
+            MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=never
+            SPRING_CACHE_TYPE=redis
+            SPRING_DATA_REDIS_HOST=secretref:redis-host
+            SPRING_DATA_REDIS_PORT=6379
+            MANAGEMENT_HEALTH_REDIS_ENABLED=true
+            OTEL_SERVICE_NAME=scholarship-service
+            OTEL_RESOURCE_ATTRIBUTES=service.name=scholarship-service,service.version=${{ env.APP_VERSION }},deployment.environment=${{ env.DEPLOY_ENVIRONMENT }},service.instance.id=${{ github.run_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}
+            APPLICATIONINSIGHTS_ROLE_NAME=scholarship-service
+            APPLICATIONINSIGHTS_ROLE_INSTANCE=${{ github.run_id }}
+            APP_VERSION=${{ env.APP_VERSION }}
+            GIT_COMMIT=${{ env.GIT_COMMIT }}
+            DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
+
+  # ============================================================
+  # 3. CHAT SERVICE (JAVA)
+  # ============================================================
+  deploy-chat:
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy' && (github.event.inputs.service == 'all' || github.event.inputs.service == 'chat-service')) || (github.event_name == 'push' && needs.detect-changes.outputs.chat == 'true') }}
+    needs: [validate, detect-changes, preflight-cloud]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: |
+          cd backend-java/chat-service
+          chmod +x mvnw || true
+          ./mvnw clean package -DskipTests
+
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build & Push Docker Image
+        run: |
+          cd backend-java/chat-service
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/chat-service:${{ github.sha }} .
+          docker push ${{ env.ACR_LOGIN_SERVER }}/chat-service:${{ github.sha }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: chat-service
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.ACR_LOGIN_SERVER }}/chat-service:${{ github.sha }}
+          environmentVariables: |
+            SPRING_DATASOURCE_URL=secretref:chat-db-url
+            SPRING_DATASOURCE_USERNAME=secretref:chat-db-username
+            SPRING_DATASOURCE_PASSWORD=secretref:chat-db-password
+            JWT_SECRET=secretref:jwt-secret
+            RABBITMQ_HOST=secretref:rabbitmq-host
+            RABBITMQ_USERNAME=secretref:rabbitmq-user
+            RABBITMQ_PASSWORD=secretref:rabbitmq-password
+            AUTH_SERVICE_URL=secretref:auth-service-url
+            APP_FIREBASE_ENABLED=false
+            JAVA_TOOL_OPTIONS=-javaagent:/opt/applicationinsights-agent.jar -XX:MaxRAMPercentage=75.0
+            SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+            SPRING_FLYWAY_ENABLED=true
+            SPRING_FLYWAY_BASELINE_ON_MIGRATE=true
+            SPRING_JPA_SHOW_SQL=false
+            MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=never
+            OTEL_SERVICE_NAME=chat-service
+            OTEL_RESOURCE_ATTRIBUTES=service.name=chat-service,service.version=${{ env.APP_VERSION }},deployment.environment=${{ env.DEPLOY_ENVIRONMENT }},service.instance.id=${{ github.run_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}
+            APPLICATIONINSIGHTS_ROLE_NAME=chat-service
+            APPLICATIONINSIGHTS_ROLE_INSTANCE=${{ github.run_id }}
+            APP_VERSION=${{ env.APP_VERSION }}
+            GIT_COMMIT=${{ env.GIT_COMMIT }}
+            DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
+
+  # ============================================================
+  # 4. MATCHING SERVICE (PYTHON) - CẤU HÌNH ĐẶC BIỆT
+  # ============================================================
+  deploy-matching:
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy' && (github.event.inputs.service == 'all' || github.event.inputs.service == 'matching-service')) || (github.event_name == 'push' && needs.detect-changes.outputs.matching == 'true') }}
+    needs: [validate, detect-changes, preflight-cloud]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Không cần cài Python/Pip ở đây vì Docker build sẽ lo hết
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build & Push Docker Image
+        run: |
+          cd matching-service
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/matching-service:${{ github.sha }} .
+          docker push ${{ env.ACR_LOGIN_SERVER }}/matching-service:${{ github.sha }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: matching-service
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.ACR_LOGIN_SERVER }}/matching-service:${{ github.sha }}
+          # QUAN TRỌNG: Map secret từ Key Vault vào biến môi trường chuẩn của Python
+          environmentVariables: |
+            DATABASE_URL=secretref:matching-db-url
+            RABBITMQ_HOST=secretref:rabbitmq-host
+            RABBITMQ_USER=secretref:rabbitmq-user
+            RABBITMQ_PASSWORD=secretref:rabbitmq-password
+            JWT_SECRET=secretref:jwt-secret
+            JWT_ALGORITHM=HS256
+            CELERY_BROKER_URL=secretref:celery-broker-url
+            CELERY_RESULT_BACKEND=rpc://
+            DEBUG=false
+            RUN_MIGRATIONS=true
+            AUTO_CREATE_TABLES=false
+            OTEL_SERVICE_NAME=matching-service
+            OTEL_RESOURCE_ATTRIBUTES=service.name=matching-service,service.version=${{ env.APP_VERSION }},deployment.environment=${{ env.DEPLOY_ENVIRONMENT }},service.instance.id=${{ github.run_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ secrets.APPLICATIONINSIGHTS_CONNECTION_STRING }}
+            APP_VERSION=${{ env.APP_VERSION }}
+            GIT_COMMIT=${{ env.GIT_COMMIT }}
+            DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
+
+  # ============================================================
+  # 5. FRONTEND (NEXT.JS)
+  # ============================================================
+  deploy-frontend:
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy' && (github.event.inputs.service == 'all' || github.event.inputs.service == 'frontend')) || (github.event_name == 'push' && needs.detect-changes.outputs.frontend == 'true') }}
+    needs: [validate, detect-changes, preflight-cloud]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build & Push Docker Image
+        env:
+          NEXT_PUBLIC_API_GATEWAY: ${{ vars.NEXT_PUBLIC_API_GATEWAY }}
+          NEXT_PUBLIC_SOCKET_URL: ${{ vars.NEXT_PUBLIC_SOCKET_URL }}
+        run: |
+          : "${NEXT_PUBLIC_API_GATEWAY:?Set GitHub environment variable NEXT_PUBLIC_API_GATEWAY}"
+          : "${NEXT_PUBLIC_SOCKET_URL:?Set GitHub environment variable NEXT_PUBLIC_SOCKET_URL}"
+          cd frontend
+          docker build --no-cache \
+            --build-arg NEXT_PUBLIC_API_GATEWAY="$NEXT_PUBLIC_API_GATEWAY" \
+            --build-arg NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_GATEWAY" \
+            --build-arg NEXT_PUBLIC_SOCKET_URL="$NEXT_PUBLIC_SOCKET_URL" \
+            -t ${{ env.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }} .
+          docker push ${{ env.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: frontend-app
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.ACR_LOGIN_SERVER }}/frontend:${{ github.sha }}
+          environmentVariables: |
+            APP_VERSION=${{ env.APP_VERSION }}
+            GIT_COMMIT=${{ env.GIT_COMMIT }}
+            DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
+
+  # ============================================================
+  # 6. NGINX GATEWAY
+  # ============================================================
+  deploy-nginx:
+    if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'deploy' && (github.event.inputs.service == 'all' || github.event.inputs.service == 'nginx')) || (github.event_name == 'push' && needs.detect-changes.outputs.nginx == 'true') }}
+    needs: [validate, detect-changes, preflight-cloud]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build & Push Docker Image
+        run: |
+          cd nginx-gateway
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/nginx-gateway:${{ github.sha }} .
+          docker push ${{ env.ACR_LOGIN_SERVER }}/nginx-gateway:${{ github.sha }}
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: nginx-gateway
+          resourceGroup: ${{ env.AZURE_RESOURCE_GROUP }}
+          imageToDeploy: ${{ env.ACR_LOGIN_SERVER }}/nginx-gateway:${{ github.sha }}
+          environmentVariables: |
+            APP_VERSION=${{ env.APP_VERSION }}
+            GIT_COMMIT=${{ env.GIT_COMMIT }}
+            DEPLOY_ENVIRONMENT=${{ env.DEPLOY_ENVIRONMENT }}
+
+  # ============================================================
+  # 8. SMOKE TEST STAGING
+  # ============================================================
+  smoke-test-staging:
+    name: Smoke test staging
+    if: ${{ always() && (github.event_name == 'push' || github.event.inputs.operation == 'deploy') && (github.event.inputs.environment || 'staging') == 'staging' && (needs.deploy-auth.result == 'success' || needs.deploy-scholarship.result == 'success' || needs.deploy-chat.result == 'success' || needs.deploy-matching.result == 'success' || needs.deploy-frontend.result == 'success' || needs.deploy-nginx.result == 'success') }}
+    needs:
+      - deploy-auth
+      - deploy-scholarship
+      - deploy-chat
+      - deploy-matching
+      - deploy-frontend
+      - deploy-nginx
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    env:
+      AUTH_DEPLOYED: ${{ needs.deploy-auth.result == 'success' }}
+      SCHOLARSHIP_DEPLOYED: ${{ needs.deploy-scholarship.result == 'success' }}
+      CHAT_DEPLOYED: ${{ needs.deploy-chat.result == 'success' }}
+      MATCHING_DEPLOYED: ${{ needs.deploy-matching.result == 'success' }}
+      FRONTEND_DEPLOYED: ${{ needs.deploy-frontend.result == 'success' }}
+      NGINX_DEPLOYED: ${{ needs.deploy-nginx.result == 'success' }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Run staging smoke tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          smoke() {
+            local app="$1"
+            local path="$2"
+            local fqdn
+            fqdn="$(az containerapp show \
+              --name "$app" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.configuration.ingress.fqdn \
+              -o tsv)"
+
+            if [[ -z "$fqdn" || "$fqdn" == "null" ]]; then
+              echo "No public ingress FQDN found for $app"
+              exit 1
+            fi
+
+            local url="https://${fqdn}${path}"
+            echo "Smoke testing $app: $url"
+
+            for attempt in {1..12}; do
+              code="$(curl -L -sS -o /tmp/smoke-response.txt -w "%{http_code}" --max-time 15 "$url" || true)"
+              if [[ "$code" =~ ^(200|204|301|302|307|308)$ ]]; then
+                echo "$app smoke test passed with HTTP $code"
+                return 0
+              fi
+
+              echo "$app smoke attempt $attempt failed with HTTP ${code:-000}; retrying..."
+              sleep 10
+            done
+
+            echo "$app smoke test failed"
+            cat /tmp/smoke-response.txt || true
+            exit 1
+          }
+
+          [[ "$AUTH_DEPLOYED" == "true" ]] && smoke auth-service /api/auth/health
+          [[ "$SCHOLARSHIP_DEPLOYED" == "true" ]] && smoke scholarship-service /debug/health
+          [[ "$CHAT_DEPLOYED" == "true" ]] && smoke chat-service /api/health
+          [[ "$MATCHING_DEPLOYED" == "true" ]] && smoke matching-service /health
+          [[ "$FRONTEND_DEPLOYED" == "true" ]] && smoke frontend-app /
+          [[ "$NGINX_DEPLOYED" == "true" ]] && smoke nginx-gateway /gateway/health
+
+  # ============================================================
+  # 9. MANUAL ROLLBACK
+  # ============================================================
+  rollback:
+    name: Rollback Container App revision
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'rollback' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'staging' }}
+    env:
+      TARGET_SERVICE: ${{ github.event.inputs.service }}
+      TARGET_REVISION: ${{ github.event.inputs.revision }}
+      DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Roll back selected service
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$TARGET_SERVICE" == "all" && -n "$TARGET_REVISION" ]]; then
+            echo "A specific revision can only be used when rolling back one service."
+            exit 1
+          fi
+
+          apps=()
+          case "$TARGET_SERVICE" in
+            all)
+              apps=(auth-service scholarship-service chat-service matching-service frontend-app nginx-gateway)
+              ;;
+            auth-service)
+              apps=(auth-service)
+              ;;
+            scholarship-service)
+              apps=(scholarship-service)
+              ;;
+            chat-service)
+              apps=(chat-service)
+              ;;
+            matching-service)
+              apps=(matching-service)
+              ;;
+            frontend)
+              apps=(frontend-app)
+              ;;
+            nginx)
+              apps=(nginx-gateway)
+              ;;
+            *)
+              echo "Unknown service: $TARGET_SERVICE"
+              exit 1
+              ;;
+          esac
+
+          rollback_app() {
+            local app="$1"
+            local target="$TARGET_REVISION"
+
+            if [[ -z "$target" ]]; then
+              mapfile -t revisions < <(az containerapp revision list \
+                --name "$app" \
+                --resource-group "$AZURE_RESOURCE_GROUP" \
+                --query "reverse(sort_by([?properties.runningState=='Running'], &properties.createdTime))[].name" \
+                -o tsv)
+
+              if (( ${#revisions[@]} < 2 )); then
+                echo "Cannot roll back $app: less than 2 running revisions found."
+                exit 1
+              fi
+
+              target="${revisions[1]}"
+            fi
+
+            echo "Rolling back $app to revision $target"
+            az containerapp revision activate \
+              --name "$app" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision "$target"
+
+            az containerapp ingress traffic set \
+              --name "$app" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --revision-weight "$target=100"
+          }
+
+          for app in "${apps[@]}"; do
+            rollback_app "$app"
+          done
+
+      - name: Smoke test rollback in staging
+        if: ${{ github.event.inputs.environment == 'staging' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          smoke() {
+            local app="$1"
+            local path="$2"
+            local fqdn
+            fqdn="$(az containerapp show \
+              --name "$app" \
+              --resource-group "$AZURE_RESOURCE_GROUP" \
+              --query properties.configuration.ingress.fqdn \
+              -o tsv)"
+
+            local url="https://${fqdn}${path}"
+            echo "Smoke testing rollback for $app: $url"
+
+            for attempt in {1..12}; do
+              code="$(curl -L -sS -o /tmp/smoke-response.txt -w "%{http_code}" --max-time 15 "$url" || true)"
+              if [[ "$code" =~ ^(200|204|301|302|307|308)$ ]]; then
+                echo "$app rollback smoke test passed with HTTP $code"
+                return 0
+              fi
+              sleep 10
+            done
+
+            echo "$app rollback smoke test failed"
+            cat /tmp/smoke-response.txt || true
+            exit 1
+          }
+
+          case "$TARGET_SERVICE" in
+            all)
+              smoke auth-service /api/auth/health
+              smoke scholarship-service /debug/health
+              smoke chat-service /api/health
+              smoke matching-service /health
+              smoke frontend-app /
+              smoke nginx-gateway /gateway/health
+              ;;
+            auth-service)
+              smoke auth-service /api/auth/health
+              ;;
+            scholarship-service)
+              smoke scholarship-service /debug/health
+              ;;
+            chat-service)
+              smoke chat-service /api/health
+              ;;
+            matching-service)
+              smoke matching-service /health
+              ;;
+            frontend)
+              smoke frontend-app /
+              ;;
+            nginx)
+              smoke nginx-gateway /gateway/health
+              ;;
+          esac

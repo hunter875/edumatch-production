@@ -1,0 +1,15 @@
+applicant_id,opportunity_id,label,reason
+1001,1001,3,perfect AI skill major and GPA match
+1001,1002,1,weak cybersecurity overlap
+1001,1003,2,good cloud/data overlap but not perfect major
+1001,1004,2,good data science fit
+1001,1005,3,strong NLP education fit
+1001,1006,0,level mismatch
+1002,1001,0,gpa below requirement and weak AI overlap
+1002,1002,3,strong cybersecurity and Java fit
+1002,1003,0,level mismatch
+1002,1004,1,weak data science overlap
+1002,1005,0,level mismatch
+1002,1006,3,strong Java distributed systems fit
+1002,1007,0,opportunity not approved
+1002,1008,0,expired opportunity

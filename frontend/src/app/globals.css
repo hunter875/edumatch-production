@@ -1,0 +1,328 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* EduMatch Brand Colors */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 218.5 79.2% 46.1%; /* brand-blue-500 */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 188.7 85.2% 45.1%; /* brand-cyan-500 */
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 258.3 89.5% 58.4%; /* brand-purple-500 */
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 74.4% 49.8%; /* danger-500 */
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 218.5 79.2% 46.1%; /* brand-blue-500 */
+    --radius: 0.75rem; /* lg = 12px */
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 218.5 79.2% 46.1%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  
+  /* Typography Scale */
+  h1 {
+    @apply text-4xl font-bold tracking-tight;
+  }
+  
+  h2 {
+    @apply text-3xl font-semibold tracking-tight;
+  }
+  
+  h3 {
+    @apply text-2xl font-semibold;
+  }
+  
+  /* Focus styles for accessibility */
+  :focus-visible {
+    @apply ring-2 ring-ring ring-offset-2 ring-offset-background outline-none;
+  }
+
+  /* Custom Keyframes */
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+    }
+    50% {
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.8), 0 0 30px rgba(147, 51, 234, 0.5);
+    }
+  }
+
+  @keyframes gradient-shift {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  /* Animation utilities */
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  .animate-pulse-glow {
+    animation: pulse-glow 3s ease-in-out infinite;
+  }
+  
+  .animate-gradient {
+    background-size: 200% 200%;
+    animation: gradient-shift 3s ease infinite;
+  }
+}
+
+@layer components {
+  /* Custom scrollbar */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted)) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted));
+    border-radius: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground));
+  }
+}
+
+@layer utilities {
+  /* Text balance for headings */
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Equal height grid utilities */
+  .grid-equal-height {
+    display: grid;
+    grid-template-rows: masonry;
+  }
+  
+  .grid-equal-height > * {
+    height: 100%;
+  }
+  
+  /* Shadow utilities */
+  .shadow-soft {
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.1), 0 4px 16px -4px rgba(0, 0, 0, 0.07);
+  }
+  
+  .shadow-elevated {
+    box-shadow: 0 4px 16px -4px rgba(0, 0, 0, 0.15), 0 8px 32px -8px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Gradient Backgrounds */
+  .bg-gradient-primary {
+    background: linear-gradient(to right, rgb(37 99 235), rgb(147 51 234), rgb(6 182 212));
+  }
+  
+  .bg-gradient-secondary {
+    background: linear-gradient(to right, rgb(239 246 255), rgb(238 242 255), rgb(250 245 255));
+  }
+  
+  .bg-gradient-tertiary {
+    background: linear-gradient(to bottom right, rgba(239, 246, 255, 0.5), rgba(250, 245, 255, 0.3), rgba(236, 254, 255, 0.5));
+  }
+
+  /* Minimal Backgrounds */
+  .bg-minimal-hero {
+    background: linear-gradient(135deg, #fafbff 0%, #f8fafc 100%);
+  }
+  
+  .bg-minimal-section {
+    background: #ffffff;
+  }
+  
+  .bg-minimal-light {
+    background: linear-gradient(to bottom, #fafbff 0%, #ffffff 100%);
+  }
+  
+  .bg-minimal-accent {
+    background: linear-gradient(135deg, #f1f5f9 0%, #f8fafc 100%);
+  }
+
+  /* Gradient Text */
+  .text-gradient-primary {
+    background: linear-gradient(to right, rgb(37 99 235), rgb(59 130 246));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  
+  .text-gradient-blue {
+    background: linear-gradient(to right, rgb(37 99 235), rgb(59 130 246));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Minimal Text */
+  .text-minimal-primary {
+    color: rgb(37 99 235);
+  }
+  
+  .text-minimal-secondary {
+    color: rgb(71 85 105);
+  }
+
+  /* Icon Gradient Backgrounds */
+  .bg-icon-blue {
+    background: linear-gradient(to bottom right, rgb(59 130 246), rgb(37 99 235));
+  }
+  
+  .bg-icon-purple {
+    background: linear-gradient(to bottom right, rgb(99 102 241), rgb(79 70 229));
+  }
+  
+  .bg-icon-cyan {
+    background: linear-gradient(to bottom right, rgb(6 182 212), rgb(8 145 178));
+  }
+  
+  .bg-icon-green {
+    background: linear-gradient(to bottom right, rgb(34 197 94), rgb(22 163 74));
+  }
+  
+  .bg-icon-orange {
+    background: linear-gradient(to bottom right, rgb(251 146 60), rgb(249 115 22));
+  }
+  
+  .bg-icon-teal {
+    background: linear-gradient(to bottom right, rgb(20 184 166), rgb(15 118 110));
+  }
+  
+  .bg-icon-pink {
+    background: linear-gradient(to bottom right, rgb(168 85 247), rgb(147 51 234));
+  }
+
+  /* Minimal Icon Backgrounds */
+  .bg-icon-minimal {
+    background: rgb(37 99 235);
+  }
+  
+  .bg-icon-minimal-secondary {
+    background: rgb(71 85 105);
+  }
+  
+  .bg-icon-minimal-accent {
+    background: rgb(99 102 241);
+  }
+
+  /* Card Hover Effects */
+  .card-hover {
+    transition: all 0.3s ease;
+  }
+  
+  .card-hover:hover {
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    transform: translateY(-2px);
+  }
+  
+  .card-minimal {
+    background: #ffffff;
+    border: 1px solid rgb(226 232 240);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+  }
+  
+  .card-minimal-elevated {
+    background: #ffffff;
+    border: 1px solid rgb(226 232 240);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  }
+  
+  .card-gradient-blue {
+    background: linear-gradient(to bottom right, rgb(239 246 255), rgb(238 242 255));
+    border: none;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .card-gradient-cyan {
+    background: linear-gradient(to bottom right, rgb(236 254 255), rgb(204 251 241));
+    border: none;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .card-gradient-purple {
+    background: linear-gradient(to bottom right, rgb(250 245 255), rgb(252 231 243));
+    border: none;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Animation Classes */
+  .animate-scale-hover {
+    transition: transform 0.3s ease;
+  }
+  
+  .animate-scale-hover:hover {
+    transform: scale(1.1);
+  }
+
+  /* Section Backgrounds */
+  .section-gradient-light {
+    background: linear-gradient(to right, rgb(239 246 255), rgb(238 242 255), rgb(250 245 255));
+  }
+  
+  .section-gradient-primary {
+    background: linear-gradient(to right, rgb(37 99 235), rgb(147 51 234), rgb(6 182 212));
+  }
+}

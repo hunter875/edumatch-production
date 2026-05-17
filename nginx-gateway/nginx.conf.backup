@@ -1,0 +1,371 @@
+# ================================================
+# Nginx API Gateway - EduMatch
+# Routes requests to all backend microservices
+# ================================================
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    # ================================================
+    # UPSTREAM DEFINITIONS
+    # ================================================
+    
+    upstream auth_service {
+        server auth-service-test:8081 max_fails=3 fail_timeout=30s;
+    }
+    
+    upstream scholarship_service {
+        server scholarship-service-test:8082 max_fails=3 fail_timeout=30s;
+    }
+    
+    upstream matching_service {
+        server matching-service-test:8000 max_fails=3 fail_timeout=30s;
+    }
+    
+    # notification_service upstream disabled for test stack (service not present)
+    # upstream notification_service {
+    #     server notification-service-test:8083 max_fails=3 fail_timeout=30s;
+    # }
+    
+    upstream frontend {
+        server frontend-test:3000 max_fails=3 fail_timeout=30s;
+    }
+
+    # ================================================
+    # RATE LIMITING ZONES
+    # ================================================
+    
+    limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=10r/s;
+    limit_req_zone $binary_remote_addr zone=api_limit:10m rate=100r/s;
+    limit_req_zone $binary_remote_addr zone=ml_limit:10m rate=5r/s;
+    
+    # Request body size limit
+    client_max_body_size 10M;
+
+    # ================================================
+    # MAIN SERVER BLOCK
+    # ================================================
+    
+    server {
+        listen 80;
+        server_name localhost;
+        
+        # Logging
+        access_log /var/log/nginx/access.log;
+        error_log /var/log/nginx/error.log warn;
+        
+        # ================================================
+        # GATEWAY HEALTH CHECK
+        # ================================================
+        
+        location /gateway/health {
+            access_log off;
+            return 200 '{"status":"healthy","gateway":"EduMatch-API-Gateway","services":["auth","scholarship","matching","notification"]}';
+            add_header Content-Type application/json;
+        }
+        
+        location /gateway/status {
+            access_log off;
+            return 200 '{"gateway":"healthy","auth":"http://auth-service-test:8081","scholarship":"http://scholarship-service-test:8082","matching":"http://matching-service-test:8000","notification":"http://notification-service-test:8083"}';
+            add_header Content-Type application/json;
+        }
+
+        # ================================================
+        # AUTH SERVICE (Java - Port 8081)
+        # ================================================
+        
+        location /api/auth {
+            # CORS - Support credentials (cookies, authorization headers)
+            if ($request_method = 'OPTIONS') {
+                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Credentials true always;
+                add_header Vary Origin always;
+                add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+                add_header Access-Control-Max-Age 3600 always;
+                add_header Content-Length 0;
+                return 204;
+            }
+
+            # Compatibility rewrites for FE expectations
+            # 1) Old FE path -> current auth path
+            rewrite ^/api/auth/user/me$ /api/auth/me break;
+            # 2) Prefer richer user endpoint that includes roles
+            rewrite ^/api/auth/me$ /api/user/me break;
+            
+            limit_req zone=auth_limit burst=20 nodelay;
+            
+            # Hide upstream CORS to avoid duplicates
+            proxy_hide_header Access-Control-Allow-Origin;
+            proxy_hide_header Access-Control-Allow-Credentials;
+            
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 30s;
+            proxy_read_timeout 30s;
+            
+            # Ensure CORS headers on ALL responses (not just OPTIONS)
+            add_header Access-Control-Allow-Origin $http_origin always;
+            add_header Access-Control-Allow-Credentials true always;
+            add_header Vary Origin always;
+        }
+        
+        location /api/users {
+            # CORS - Support credentials
+            if ($request_method = 'OPTIONS') {
+                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Credentials true always;
+                add_header Vary Origin always;
+                add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+                add_header Access-Control-Max-Age 3600 always;
+                add_header Content-Length 0;
+                return 204;
+            }
+            
+            limit_req zone=api_limit burst=20 nodelay;
+            
+            proxy_hide_header Access-Control-Allow-Origin;
+            proxy_hide_header Access-Control-Allow-Credentials;
+            
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 30s;
+            proxy_read_timeout 30s;
+            
+            add_header Access-Control-Allow-Origin $http_origin always;
+            add_header Access-Control-Allow-Credentials true always;
+            add_header Vary Origin always;
+        }
+
+        # ================================================
+        # SCHOLARSHIP SERVICE (Java - Port 8082)
+        # ================================================
+        
+        location /api/scholarships {
+            # CORS - Support credentials
+            if ($request_method = 'OPTIONS') {
+                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Credentials true always;
+                add_header Vary Origin always;
+                add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+                add_header Access-Control-Max-Age 3600 always;
+                add_header Content-Length 0;
+                return 204;
+            }
+            add_header Access-Control-Allow-Origin $http_origin always;
+            add_header Access-Control-Allow-Credentials true always;
+            add_header Vary Origin always;
+            
+            limit_req zone=api_limit burst=20 nodelay;
+            
+            proxy_pass http://scholarship_service;
+            proxy_hide_header Access-Control-Allow-Origin;
+            proxy_hide_header Access-Control-Allow-Credentials;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 30s;
+            proxy_read_timeout 30s;
+        }
+        
+        location /api/opportunities {
+            # CORS - Support credentials
+            if ($request_method = 'OPTIONS') {
+                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Credentials true always;
+                add_header Vary Origin always;
+                add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+                add_header Access-Control-Max-Age 3600 always;
+                add_header Content-Length 0;
+                return 204;
+            }
+            add_header Access-Control-Allow-Origin $http_origin always;
+            add_header Access-Control-Allow-Credentials true always;
+            add_header Vary Origin always;
+            
+            limit_req zone=api_limit burst=20 nodelay;
+            
+            proxy_pass http://scholarship_service;
+            proxy_hide_header Access-Control-Allow-Origin;
+            proxy_hide_header Access-Control-Allow-Credentials;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 30s;
+            proxy_read_timeout 30s;
+        }
+        
+        location /api/applications {
+            # CORS - Support credentials
+            if ($request_method = 'OPTIONS') {
+                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Credentials true always;
+                add_header Vary Origin always;
+                add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, PATCH, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+                add_header Access-Control-Max-Age 3600 always;
+                add_header Content-Length 0;
+                return 204;
+            }
+            add_header Access-Control-Allow-Origin $http_origin always;
+            add_header Access-Control-Allow-Credentials true always;
+            add_header Vary Origin always;
+            
+            limit_req zone=api_limit burst=20 nodelay;
+            
+            proxy_pass http://scholarship_service;
+            proxy_hide_header Access-Control-Allow-Origin;
+            proxy_hide_header Access-Control-Allow-Credentials;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            proxy_connect_timeout 30s;
+            proxy_send_timeout 30s;
+            proxy_read_timeout 30s;
+        }
+
+        # ================================================
+        # NOTIFICATION SERVICE (disabled in test compose)
+        # ================================================
+        # location /api/notifications {
+        #     ...
+        # }
+
+        # ================================================
+        # MATCHING SERVICE (Python - Port 8000)
+        # ================================================
+        
+        location /api/matching {
+            # CORS - Support credentials
+            if ($request_method = 'OPTIONS') {
+                add_header Access-Control-Allow-Origin $http_origin always;
+                add_header Access-Control-Allow-Credentials true always;
+                add_header Vary Origin always;
+                add_header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+                add_header Access-Control-Max-Age 3600 always;
+                add_header Content-Length 0;
+                return 204;
+            }
+            add_header Access-Control-Allow-Origin $http_origin always;
+            add_header Access-Control-Allow-Credentials true always;
+            add_header Vary Origin always;
+            
+            limit_req zone=api_limit burst=20 nodelay;
+            
+            proxy_pass http://matching_service;
+            proxy_hide_header Access-Control-Allow-Origin;
+            proxy_hide_header Access-Control-Allow-Credentials;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Longer timeout for ML operations
+            proxy_connect_timeout 60s;
+            proxy_send_timeout 60s;
+            proxy_read_timeout 60s;
+        }
+        
+        location /health {
+            # CORS
+            if ($request_method = 'OPTIONS') {
+                add_header Access-Control-Allow-Origin "*" always;
+                add_header Access-Control-Allow-Methods "GET, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+                add_header Access-Control-Max-Age 3600 always;
+                add_header Content-Length 0;
+                return 204;
+            }
+            add_header Access-Control-Allow-Origin "*" always;
+            
+            proxy_pass http://matching_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        
+        location /recommendations {
+            # CORS
+            if ($request_method = 'OPTIONS') {
+                add_header Access-Control-Allow-Origin "*" always;
+                add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+                add_header Access-Control-Allow-Headers "Authorization, Content-Type" always;
+                add_header Access-Control-Max-Age 3600 always;
+                add_header Content-Length 0;
+                return 204;
+            }
+            add_header Access-Control-Allow-Origin "*" always;
+            
+            limit_req zone=ml_limit burst=3 nodelay;
+            
+            proxy_pass http://matching_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # Extra long timeout for ML recommendations
+            proxy_connect_timeout 90s;
+            proxy_send_timeout 90s;
+            proxy_read_timeout 90s;
+        }
+
+        # ================================================
+        # FRONTEND (Next.js - Port 3000)
+        # ================================================
+        
+        location / {
+            proxy_pass http://frontend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            
+            # For Next.js hot reload in development
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+        }
+
+        # ================================================
+        # ERROR PAGES
+        # ================================================
+        
+        error_page 502 503 504 /50x.html;
+        location = /50x.html {
+            return 503 '{"error":"Service Unavailable","message":"Backend service is currently unavailable. Please try again later."}';
+            add_header Content-Type application/json;
+        }
+        
+        error_page 404 /404.html;
+        location = /404.html {
+            return 404 '{"error":"Not Found","message":"The requested resource was not found"}';
+            add_header Content-Type application/json;
+        }
+    }
+}
