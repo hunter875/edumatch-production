@@ -137,7 +137,7 @@ export default function AdminNotificationsPage() {
     });
   };
 
-  const useTemplate = (template: NotificationTemplate) => {
+  const handleUseTemplate = (template: NotificationTemplate) => {
     setSelectedTemplate(template);
     setShowSendModal(true);
   };
@@ -272,7 +272,7 @@ export default function AdminNotificationsPage() {
                   <Button
                     variant="outline"
                     className="w-full"
-                    onClick={() => useTemplate(template)}
+                    onClick={() => handleUseTemplate(template)}
                   >
                     {t('adminNotifications.templates.useTemplate')}
                   </Button>
