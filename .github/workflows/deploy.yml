@@ -43,8 +43,8 @@ on:
         type: string
 
 env:
-  AZURE_RESOURCE_GROUP: EduMatch-RG
-  ACR_LOGIN_SERVER: edumatchacr.azurecr.io
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'EduMatch-VM-RG-v2' }}
+  ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER || 'edumatchminhacr.azurecr.io' }}
   DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment || 'staging' }}
   APP_VERSION: ${{ github.sha }}
   GIT_COMMIT: ${{ github.sha }}

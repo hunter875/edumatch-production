@@ -22,7 +22,7 @@ on:
         type: string
 
 env:
-  AZURE_RESOURCE_GROUP: EduMatch-RG
+  AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP || 'EduMatch-VM-RG-v2' }}
 
 jobs:
   provision-observability:

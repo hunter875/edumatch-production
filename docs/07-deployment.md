@@ -188,6 +188,129 @@ APP_FIREBASE_ENABLED=false
 
 Use `.github/workflows/deploy.yml` for staging/production deploy.
 
+### Azure Container Apps Provisioning
+
+This path uses Azure Container Apps, not an Azure VM.
+
+Target architecture:
+
+```txt
+GitHub Actions
+  -> build Docker images
+  -> push Azure Container Registry
+  -> deploy Azure Container Apps revisions
+  -> smoke test staging
+
+Internet
+  -> nginx-gateway Container App
+  -> frontend-app / auth-service / scholarship-service / chat-service / matching-service
+  -> external DB/Redis/RabbitMQ dependencies through secrets
+```
+
+Create the app hosting layer:
+
+```powershell
+.\scripts\provision-azure-container-apps.ps1 `
+  -ResourceGroup EduMatch-VM-RG-v2 `
+  -Location southeastasia `
+  -Environment staging `
+  -AcrName edumatchminhacr
+```
+
+If `edumatchminhacr` is already taken globally, choose another ACR name and set `ACR_LOGIN_SERVER` accordingly.
+
+Provisioned resources:
+
+```txt
+Azure Container Registry
+Log Analytics Workspace
+Application Insights
+Container Apps Environment
+auth-service Container App
+scholarship-service Container App
+chat-service Container App
+matching-service Container App
+frontend-app Container App
+nginx-gateway Container App
+```
+
+After provisioning, set real dependency secrets. Do not commit secret values.
+
+```powershell
+.\scripts\set-containerapp-secrets.ps1 `
+  -ResourceGroup EduMatch-VM-RG-v2 `
+  -AuthDbUrl "<jdbc-auth-db-url>" `
+  -AuthDbUsername "<auth-db-user>" `
+  -AuthDbPassword "<auth-db-password>" `
+  -ScholarshipDbUrl "<jdbc-scholarship-db-url>" `
+  -ScholarshipDbUsername "<scholarship-db-user>" `
+  -ScholarshipDbPassword "<scholarship-db-password>" `
+  -ChatDbUrl "<jdbc-chat-db-url>" `
+  -ChatDbUsername "<chat-db-user>" `
+  -ChatDbPassword "<chat-db-password>" `
+  -MatchingDbUrl "<postgres-matching-db-url>" `
+  -JwtSecret "<shared-jwt-secret>" `
+  -RabbitMqHost "<rabbitmq-host>" `
+  -RabbitMqUser "<rabbitmq-user>" `
+  -RabbitMqPassword "<rabbitmq-password>" `
+  -RedisHost "<redis-host>" `
+  -AuthServiceUrl "https://<auth-service-fqdn>" `
+  -MatchingServiceUrl "https://<matching-service-fqdn>" `
+  -CeleryBrokerUrl "amqp://<rabbitmq-user>:<rabbitmq-password>@<rabbitmq-host>:5672//"
+```
+
+Check provisioned app FQDNs:
+
+```powershell
+az containerapp list -g EduMatch-VM-RG-v2 --query "[].{name:name,fqdn:properties.configuration.ingress.fqdn}" -o table
+```
+
+Set GitHub repository/environment variables:
+
+```powershell
+gh variable set AZURE_RESOURCE_GROUP --body "EduMatch-VM-RG-v2"
+gh variable set ACR_LOGIN_SERVER --body "edumatchminhacr.azurecr.io"
+gh variable set NEXT_PUBLIC_API_GATEWAY --env staging --body "https://<nginx-gateway-fqdn>"
+gh variable set NEXT_PUBLIC_SOCKET_URL --env staging --body "wss://<nginx-gateway-fqdn>/api/ws"
+```
+
+Set GitHub Actions secrets:
+
+```powershell
+$acrUsername = az acr credential show -n edumatchminhacr --query username -o tsv
+$acrPassword = az acr credential show -n edumatchminhacr --query "passwords[0].value" -o tsv
+$appInsightsConnectionString = az monitor app-insights component show -g EduMatch-VM-RG-v2 -a edumatch-staging-appi --query connectionString -o tsv
+
+gh secret set REGISTRY_USERNAME --body $acrUsername
+gh secret set REGISTRY_PASSWORD --body $acrPassword
+gh secret set APPLICATIONINSIGHTS_CONNECTION_STRING --body $appInsightsConnectionString
+```
+
+Create `AZURE_CREDENTIALS` for GitHub Actions:
+
+```powershell
+az ad sp create-for-rbac `
+  --name "edumatch-github-actions" `
+  --role contributor `
+  --scopes /subscriptions/<subscription-id>/resourceGroups/EduMatch-VM-RG-v2 `
+  --sdk-auth
+```
+
+Copy the JSON output into:
+
+```powershell
+gh secret set AZURE_CREDENTIALS
+```
+
+Data dependencies are intentionally not created by `container-apps.bicep`. For production-like deployments, use managed services:
+
+```txt
+MySQL Flexible Server for auth/scholarship/chat
+PostgreSQL Flexible Server for matching
+Azure Cache for Redis
+RabbitMQ on VM/Container App, or replace with Azure Service Bus in a later architecture pass
+```
+
 Manual deploy:
 
 ```txt
