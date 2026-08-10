@@ -186,18 +186,33 @@ powershell -ExecutionPolicy Bypass -File .\scripts\seed-dev-data.ps1 -MatchingOn
 
 ## Documentation
 
-| Document | Purpose |
+The documentation is organized as a MkDocs Material site. Markdown files remain
+the source of truth, and the HTML site is generated from them.
+
+Run locally:
+
+```powershell
+pip install -r requirements-docs.txt
+mkdocs serve
+```
+
+Build static HTML:
+
+```powershell
+mkdocs build
+```
+
+Start at [`docs/index.md`](docs/index.md). The main sections are:
+
+| Section | Purpose |
 | --- | --- |
-| [`docs/00-overview.md`](docs/00-overview.md) | Project goals and system overview |
-| [`docs/01-system-architecture.md`](docs/01-system-architecture.md) | Service architecture |
-| [`docs/02-api-contract.md`](docs/02-api-contract.md) | API contracts |
-| [`docs/03-data-model.md`](docs/03-data-model.md) | Data model notes |
-| [`docs/04-matching-design.md`](docs/04-matching-design.md) | Matching design |
-| [`docs/05-performance-playbook.md`](docs/05-performance-playbook.md) | Performance issues and fixes |
-| [`docs/DB_SCHEMA_OVERVIEW.md`](docs/DB_SCHEMA_OVERVIEW.md) | Live database schema overview |
-| [`docs/QA_TEST_CHECKLIST.md`](docs/QA_TEST_CHECKLIST.md) | Manual QA checklist |
-| [`docs/SYSTEM_PERFORMANCE_REVIEW.md`](docs/SYSTEM_PERFORMANCE_REVIEW.md) | Performance review |
-| [`docs/PRODUCTION_READINESS_CHECKLIST.md`](docs/PRODUCTION_READINESS_CHECKLIST.md) | Production readiness checklist |
+| Getting Started | local setup, environment variables, seed data |
+| Architecture | service boundaries, data flow, matching design |
+| API | contracts and standardization notes |
+| Deployment | Docker, Azure Container Apps, CI/CD, secrets |
+| Operations | runbooks, observability, QA, readiness |
+| Performance | bottlenecks, benchmark plan, optimization reports |
+| Decisions | architecture decision records |
 
 ## Project Status
 

@@ -35,8 +35,9 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(request -> {
                     CorsConfiguration config = new CorsConfiguration();
-                    config.addAllowedOrigin("http://localhost:3000");  // FE
-                    config.addAllowedOrigin("http://localhost:8080");  // Gateway
+                    config.addAllowedOriginPattern("http://localhost:*");
+                    config.addAllowedOriginPattern("http://127.0.0.1:*");
+                    config.addAllowedOriginPattern("https://*.azurecontainerapps.io");
                     config.addAllowedMethod("*");
                     config.addAllowedHeader("*");
                     config.setAllowCredentials(true);

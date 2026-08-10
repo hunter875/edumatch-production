@@ -1,0 +1,114 @@
+site_name: EduMatch Documentation
+site_description: Cloud-native scholarship matching platform documentation.
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Overview: index.md
+  - Documentation Inventory: DOCS_INVENTORY.md
+  - Getting Started:
+      - Local Setup: getting-started/local-setup.md
+      - Environment Variables: getting-started/environment.md
+      - Seed Data: getting-started/seed-data.md
+      - Seed Data Reference: SEED_DATA.md
+  - Architecture:
+      - Architecture Map: architecture/index.md
+      - Project Overview: 00-overview.md
+      - System Architecture: 01-system-architecture.md
+      - Service Boundaries: architecture/services.md
+      - Data Flow: 06-data-flow.md
+      - Data Model: 03-data-model.md
+      - DB Schema Overview: DB_SCHEMA_OVERVIEW.md
+      - Matching Design: 04-matching-design.md
+  - API:
+      - API Overview: api/index.md
+      - API Contract: 02-api-contract.md
+      - API Standardization: API_STANDARDIZATION_GUIDE.md
+  - Deployment:
+      - Deployment Map: deployment/index.md
+      - Local And Cloud Deployment: 07-deployment.md
+      - Azure Container Apps: CLOUD_DEPLOYMENT_GUIDE.md
+      - Cloud Maintenance: CLOUD_DEPLOYMENT_MAINTENANCE_RUNBOOK.md
+      - Deploy Control: DEPLOY_CONTROL_RUNBOOK.md
+  - Operations:
+      - Operations Map: operations/index.md
+      - Troubleshooting Runbook: 08-runbook.md
+      - Observability: OBSERVABILITY_RUNBOOK.md
+      - DB Migration Runbook: DB_MIGRATION_RUNBOOK.md
+      - QA Checklist: QA_TEST_CHECKLIST.md
+      - Frontend QC Review: FE_QC_EDGE_CASE_REVIEW.md
+      - Production Readiness: PRODUCTION_READINESS_CHECKLIST.md
+      - Cloud Staging Incident: CLOUD_STAGING_PERFORMANCE_INCIDENT_REPORT.md
+  - Performance:
+      - Performance Map: performance/index.md
+      - System Performance Review: SYSTEM_PERFORMANCE_REVIEW.md
+      - Performance Playbook: 05-performance-playbook.md
+      - DB Optimization Report: DB_OPTIMIZATION_REPORT.md
+      - Cache Layer Guide: CACHE_LAYER_OPTIMIZATION_GUIDE.md
+      - Optimization Roadmap: 09-optimization-roadmap.md
+  - Decisions:
+      - Decision Log: decisions/index.md
+      - Search Architecture: SEARCH_ARCHITECTURE_DECISION.md
+      - Matching Service Decision: decisions/0001-rule-based-matching-first.md
+      - Cloud Runtime Decision: decisions/0002-container-apps-first.md
+  - Learning:
+      - Backend Learning Guide: 10-junior-backend-learning-guide.md
+      - Cloud From Zero To Production: learning/cloud-from-zero-to-production.md
+      - Production Hardening:
+          - Overview: learning/production-hardening/index.md
+          - Benchmark 10k/100k: learning/production-hardening/benchmark-10k-100k.md
+          - Cloud Replicas And Autoscale: learning/production-hardening/cloud-replicas-autoscale.md
+          - CDN, Front Door, And WAF: learning/production-hardening/edge-cdn-front-door-waf.md
+          - Versioned Matching Cache: learning/production-hardening/versioned-matching-cache.md
+          - Matching Worker Full Scan: learning/production-hardening/matching-worker-full-scan.md
+          - Redis Public Cache And Coalescing: learning/production-hardening/redis-public-cache-coalescing.md
+      - Portfolio CV EN: cv/CV_FULLSTACK_BACKEND_EN.md
+      - Portfolio CV VI: cv/CV_FULLSTACK_BACKEND_VI.md
+  - Contributing:
+      - Documentation Guide: contributing/docs-guide.md

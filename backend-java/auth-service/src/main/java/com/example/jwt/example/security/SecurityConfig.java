@@ -56,11 +56,9 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(request -> {
                     var corsConfig = new org.springframework.web.cors.CorsConfiguration();
-                    corsConfig.addAllowedOrigin("http://localhost:3000"); // Frontend URL
-                    corsConfig.addAllowedOrigin("http://127.0.0.1:3000"); // Frontend URL (alternative)
-                    corsConfig.addAllowedOrigin("http://localhost:8080"); // Gateway URL
-                    corsConfig.addAllowedOriginPattern("http://localhost:*"); // Allow all localhost ports
-                    corsConfig.addAllowedOriginPattern("http://127.0.0.1:*"); // Allow all 127.0.0.1 ports
+                    corsConfig.addAllowedOriginPattern("http://localhost:*"); // Local frontend/gateway
+                    corsConfig.addAllowedOriginPattern("http://127.0.0.1:*"); // Local frontend/gateway
+                    corsConfig.addAllowedOriginPattern("https://*.azurecontainerapps.io"); // Azure Container Apps gateway/frontend
                     corsConfig.addAllowedMethod("*"); // Allow all methods (GET, POST, PUT, DELETE, etc.)
                     corsConfig.addAllowedHeader("*"); // Allow all headers
                     corsConfig.setAllowCredentials(true); // Allow cookies

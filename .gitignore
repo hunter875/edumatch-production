@@ -12,6 +12,7 @@ target/
 out/
 dist/
 build/
+site/
 *.tsbuildinfo
 .turbo/
 

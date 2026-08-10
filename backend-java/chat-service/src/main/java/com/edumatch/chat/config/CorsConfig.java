@@ -24,7 +24,11 @@ public class CorsConfig {
         config.setAllowCredentials(true);
         
         // Allow requests from frontend
-        config.setAllowedOriginPatterns(Arrays.asList("http://localhost:3000", "http://localhost:*"));
+        config.setAllowedOriginPatterns(Arrays.asList(
+                "http://localhost:*",
+                "http://127.0.0.1:*",
+                "https://*.azurecontainerapps.io"
+        ));
         
         // Allow all headers
         config.addAllowedHeader("*");

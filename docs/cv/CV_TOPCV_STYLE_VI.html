@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <title>CV - Junior Full-Stack / Backend Developer</title>
+  <style>
+    body{margin:0;background:#eef0f3;font-family:Arial,Helvetica,sans-serif;color:#000}
+    .page{width:900px;margin:24px auto;background:#fff;padding:32px 38px;box-shadow:0 2px 10px #cfd3d8}
+    .header{display:grid;grid-template-columns:150px 1fr;gap:24px;align-items:start}
+    .photo{width:145px;height:180px;background:#e8e8e8;border:1px solid #ccc;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:700;color:#666}
+    h1{font-size:28px;margin:0 0 6px 0}
+    .role{font-size:19px;margin-bottom:8px}
+    .info div{font-size:15px;line-height:1.6}
+    .label{font-weight:700;display:inline-block;min-width:112px}
+    h2{font-size:20px;margin:28px 0 14px 0;border-bottom:2px solid #000;padding-bottom:6px;text-transform:uppercase}
+    p{font-size:15.5px;line-height:1.55;margin:0 0 10px}
+    .entry{display:grid;grid-template-columns:160px 1fr;gap:18px;margin:0 0 18px}
+    .date{font-size:15px}
+    .entry h3{font-size:16px;margin:0 0 8px;font-weight:700}
+    .entry .sub{font-weight:700;margin-bottom:6px}
+    ul{margin:6px 0 0 18px;padding:0}
+    li{font-size:15.2px;line-height:1.5;margin:3px 0}
+    .note{font-weight:700;margin-top:8px}
+    .skill-row{display:grid;grid-template-columns:160px 1fr;gap:18px;border-bottom:1px solid #e6e6e6;padding:8px 0}
+    .skill-label{font-weight:700}
+    @media print{body{background:#fff}.page{width:auto;margin:0;box-shadow:none;padding:20mm}}
+  </style>
+</head>
+<body>
+<main class="page">
+  <section class="header">
+    <div class="photo">ẢNH<br>3x4</div>
+    <div class="info">
+      <h1>[HỌ VÀ TÊN]</h1>
+      <div class="role">Junior Full-Stack / Backend Developer</div>
+      <div><span class="label">Ngày sinh:</span>[DD/MM/YYYY]</div>
+      <div><span class="label">Giới tính:</span>[Nam/Nữ]</div>
+      <div><span class="label">Số điện thoại:</span>[số điện thoại]</div>
+      <div><span class="label">Email:</span>[email]</div>
+      <div><span class="label">Website:</span>[GitHub / LinkedIn / Upwork]</div>
+      <div><span class="label">Địa chỉ:</span>TP. Hồ Chí Minh, Việt Nam</div>
+    </div>
+  </section>
+
+  <h2>Mục tiêu nghề nghiệp</h2>
+  <p>Tôi là lập trình viên junior định hướng Full-Stack/Backend, mong muốn làm việc trong môi trường thực tế để phát triển kỹ năng xây dựng API, tối ưu database, xử lý bug, triển khai Docker/cloud và viết tài liệu kỹ thuật rõ ràng. Tôi có kinh nghiệm thực hành qua các dự án microservices, hệ thống xử lý tài liệu, Redis/RabbitMQ, CI/CD và Azure Container Apps.</p>
+
+  <h2>Học vấn</h2>
+  <div class="entry">
+    <div class="date">[Năm bắt đầu] - [Năm kết thúc]</div>
+    <div>
+      <h3>[Tên trường]</h3>
+      <div class="sub">Chuyên ngành: [Ngành học của bạn]</div>
+      <ul>
+        <li>Môn học/liên quan: Cơ sở dữ liệu, Lập trình Web, Kiến trúc phần mềm, Mạng máy tính.</li>
+        <li>Định hướng học tập: Backend, API, database, triển khai hệ thống và kiểm thử luồng nghiệp vụ.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Dự án / Kinh nghiệm thực hành</h2>
+  <div class="entry">
+    <div class="date">2026</div>
+    <div>
+      <h3>EduMatch - Nền tảng tìm kiếm và quản lý học bổng</h3>
+      <div class="sub">Full-Stack / Backend Developer</div>
+      <ul>
+        <li>Xây dựng nền tảng web cho phép học sinh tìm kiếm học bổng, nộp đơn và trao đổi với nhà cung cấp.</li>
+        <li>Phát triển các chức năng chính: đăng nhập JWT, quản lý học bổng, nộp đơn, bookmark, chat, thông báo, dashboard provider và trang quản trị.</li>
+        <li>Xây dựng matching service để gợi ý học bổng phù hợp dựa trên GPA, bậc học, kỹ năng, hình thức học và địa điểm.</li>
+        <li>Tối ưu một số truy vấn MySQL cho danh sách học bổng, thống kê đơn ứng tuyển và bookmark bằng index và EXPLAIN ANALYZE.</li>
+        <li>Đóng gói hệ thống bằng Docker, cấu hình Nginx gateway và triển khai thử lên Azure Container Apps bằng GitHub Actions.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="entry">
+    <div class="date">2026</div>
+    <div>
+      <h3>Doc Automation Engine - Bóc tách Báo cáo PDF và Xuất Word</h3>
+      <div class="sub">Backend Developer</div>
+      <ul>
+        <li>Xây dựng backend FastAPI cho luồng upload báo cáo PDF, tạo job bóc tách dữ liệu, kiểm tra kết quả và xuất file Word.</li>
+        <li>Dùng pdfplumber và regex để trích xuất các trường chính từ báo cáo PCCC theo cấu trúc có sẵn.</li>
+        <li>Tách các tác vụ xử lý nặng sang Celery worker với Redis queue để API không phải chờ xử lý trực tiếp.</li>
+        <li>Lưu metadata và kết quả bóc tách bằng PostgreSQL JSONB, lưu file gốc và template bằng MinIO.</li>
+        <li>Xuất báo cáo Word từ dữ liệu đã tổng hợp bằng docxtpl/Jinja2.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Kỹ năng</h2>
+  <div class="skill-row"><div class="skill-label">Kỹ năng cứng</div><ul><li>Frontend: React, Next.js, TypeScript, Tailwind CSS, React Query.</li><li>Backend: Spring Boot, FastAPI, REST API, JWT authentication, role-based access control.</li><li>Database/Infra: MySQL, PostgreSQL, Redis, RabbitMQ, Celery, Docker, Nginx, Azure Container Apps, GitHub Actions.</li></ul></div>
+  <div class="skill-row"><div class="skill-label">Kỹ năng mềm</div><ul><li>Debug theo luồng: frontend network, gateway, service log, database query, dependency.</li><li>Giao tiếp rõ ràng, viết tài liệu dễ hiểu, cẩn thận khi kiểm thử luồng người dùng.</li><li>Sẵn sàng học công nghệ mới và nhận việc nhỏ để tích lũy kinh nghiệm thực tế.</li></ul></div>
+
+  <h2>Người giới thiệu</h2>
+  <p>Sẽ cung cấp khi được yêu cầu.</p>
+
+  <h2>Sở thích</h2>
+  <p>Tìm hiểu backend, hệ thống phân tán, cloud deployment, đọc tài liệu kỹ thuật và xây dựng sản phẩm web.</p>
+</main>
+</body>
+</html>
