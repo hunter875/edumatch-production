@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash mvnw compile -B)",
+      "Bash(where java *)",
+      "Bash(where javac *)",
+      "Read(//c/Program Files/**)"
+    ]
+  }
+}
