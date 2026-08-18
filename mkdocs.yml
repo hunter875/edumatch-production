@@ -105,10 +105,9 @@ nav:
           - Benchmark 10k/100k: learning/production-hardening/benchmark-10k-100k.md
           - Cloud Replicas And Autoscale: learning/production-hardening/cloud-replicas-autoscale.md
           - CDN, Front Door, And WAF: learning/production-hardening/edge-cdn-front-door-waf.md
-          - Versioned Matching Cache: learning/production-hardening/versioned-matching-cache.md
-          - Matching Worker Full Scan: learning/production-hardening/matching-worker-full-scan.md
-          - Redis Public Cache And Coalescing: learning/production-hardening/redis-public-cache-coalescing.md
-      - Portfolio CV EN: cv/CV_FULLSTACK_BACKEND_EN.md
-      - Portfolio CV VI: cv/CV_FULLSTACK_BACKEND_VI.md
+      - Versioned Matching Cache: learning/production-hardening/versioned-matching-cache.md
+      - Matching Worker Full Scan: learning/production-hardening/matching-worker-full-scan.md
+      - Redis Public Cache And Coalescing: learning/production-hardening/redis-public-cache-coalescing.md
   - Contributing:
+      - AI-Assisted Workflow: development/ai-assisted-workflow.md
       - Documentation Guide: contributing/docs-guide.md

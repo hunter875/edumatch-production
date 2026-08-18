@@ -36,6 +36,7 @@ temp/
 .tmp/
 .tmp-*/
 .tmp-edge-qc/
+*.backup
 test-results/
 playwright-report/
 .playwright/
@@ -44,6 +45,11 @@ playwright-report/
 .env
 .env.*
 !.env.example
+
+# Local agent/tooling state and personal artifacts
+.claude/
+**/.claude/
+docs/cv/
 
 # Logs
 logs/
