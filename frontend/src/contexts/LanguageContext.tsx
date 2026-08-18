@@ -19,15 +19,42 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 
 // ---- Lazy-loaded translation store ----
 const loadedTranslations: Record<string, Record<string, string>> = {};
-const loadingNamespaces = new Set<string>();
+const loadingNamespaces = new Map<string, Promise<void>>();
+const namespaces: Namespace[] = [
+  'common',
+  'auth',
+  'scholarship',
+  'application',
+  'message',
+  'profile',
+  'home',
+  'about',
+  'pricing',
+  'contact',
+  'dashboard',
+  'provider',
+  'admin',
+];
 
-async function loadNamespace(lang: Language, ns: Namespace): Promise<void> {
+async function loadNamespace(lang: Language, ns: Namespace): Promise<boolean> {
   const cacheKey = `${lang}:${ns}`;
-  if (loadedTranslations[cacheKey] || loadingNamespaces.has(cacheKey)) return;
-  loadingNamespaces.add(cacheKey);
+  if (loadedTranslations[cacheKey]) return false;
+
+  const pending = loadingNamespaces.get(cacheKey);
+  if (pending) {
+    await pending;
+    return Boolean(loadedTranslations[cacheKey]);
+  }
+
+  const loadPromise = import(`@/locales/${lang}/${ns}.json`)
+    .then((mod) => {
+      loadedTranslations[cacheKey] = mod.default ?? mod;
+    });
+
+  loadingNamespaces.set(cacheKey, loadPromise);
   try {
-    const mod = await import(`@/locales/${lang}/${ns}.json`);
-    loadedTranslations[cacheKey] = mod.default ?? mod;
+    await loadPromise;
+    return true;
   } finally {
     loadingNamespaces.delete(cacheKey);
   }
@@ -60,16 +87,7 @@ function namespaceForKey(key: string): Namespace {
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>('en');
   const [isClient, setIsClient] = useState(false);
-
-  useEffect(() => {
-    setIsClient(true);
-    const saved = localStorage.getItem('language') as Language;
-    if (saved && (saved === 'en' || saved === 'vi')) {
-      setLanguageState(saved);
-    }
-    // Preload the common namespace so it's available immediately
-    preloadNamespace('common');
-  }, []);
+  const [translationVersion, setTranslationVersion] = useState(0);
 
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
@@ -79,7 +97,33 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const preloadNamespace = useCallback(async (ns: Namespace) => {
-    await loadNamespace(language, ns);
+    const loaded = await loadNamespace(language, ns);
+    if (loaded) {
+      setTranslationVersion((version) => version + 1);
+    }
+  }, [language]);
+
+  useEffect(() => {
+    setIsClient(true);
+    const saved = localStorage.getItem('language') as Language;
+    if (saved && (saved === 'en' || saved === 'vi')) {
+      setLanguageState(saved);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    Promise.all(namespaces.map((ns) => loadNamespace(language, ns)))
+      .then((loaded) => {
+        if (!cancelled && loaded.some(Boolean)) {
+          setTranslationVersion((version) => version + 1);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [language]);
 
   const t = useCallback((key: string, params?: Record<string, string | number | undefined>): string => {
