@@ -2,6 +2,7 @@ package com.edumatch.scholarship.controller.v1;
 
 import com.edumatch.scholarship.config.SecurityConfig;
 import com.edumatch.scholarship.dto.ApplicationDto;
+import com.edumatch.scholarship.dto.CreateApplicationRequest;
 import com.edumatch.scholarship.dto.OpportunityDto;
 import com.edumatch.scholarship.dto.api.PageResponse;
 import com.edumatch.scholarship.security.JwtAccessDeniedHandler;
@@ -21,6 +22,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -32,8 +34,10 @@ import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -138,5 +142,56 @@ class SearchEndpointSecurityTest {
                         .param("keyword", "student"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").isArray());
+    }
+
+    @Test
+    @WithMockUser(authorities = "ROLE_EMPLOYER")
+    void createApplicationRejectsEmployerBeforeIdempotency() throws Exception {
+        mockMvc.perform(post("/api/v1/applications")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"opportunityId\":7}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(idempotencyService);
+        verifyNoInteractions(applicationService);
+    }
+
+    @Test
+    @WithMockUser(username = "student@example.com", authorities = "ROLE_USER")
+    void createApplicationPassesUserAndIdempotencyKeyToWrapper() throws Exception {
+        ApplicationDto created = ApplicationDto.builder()
+                .id(42L)
+                .opportunityId(7L)
+                .status("SUBMITTED")
+                .build();
+
+        when(idempotencyService.execute(
+                eq("apply-7"),
+                eq("student@example.com"),
+                eq("POST /api/v1/applications"),
+                any(CreateApplicationRequest.class),
+                eq(ApplicationDto.class),
+                any()
+        )).thenReturn(created);
+
+        mockMvc.perform(post("/api/v1/applications")
+                        .header("Idempotency-Key", "apply-7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"opportunityId\":7,\"coverLetter\":\"hello\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.data.id").value(42))
+                .andExpect(jsonPath("$.data.opportunityId").value(7));
+
+        ArgumentCaptor<CreateApplicationRequest> requestCaptor =
+                ArgumentCaptor.forClass(CreateApplicationRequest.class);
+        verify(idempotencyService).execute(
+                eq("apply-7"),
+                eq("student@example.com"),
+                eq("POST /api/v1/applications"),
+                requestCaptor.capture(),
+                eq(ApplicationDto.class),
+                any()
+        );
+        assertThat(requestCaptor.getValue().getOpportunityId()).isEqualTo(7L);
     }
 }
