@@ -77,7 +77,7 @@ class RecommendationResponse(BaseModel):
     metadata: RecommendationMetadata
     data: List[RecommendationItem]
 
-# ============= Event Schemas (for Celery workers) =============
+# ============= Event Schemas (for matching event handlers) =============
 
 class UserProfileUpdatedEvent(BaseModel):
     """Event schema for user.profile.updated"""

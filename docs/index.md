@@ -27,7 +27,7 @@ flowchart LR
     Scholarship --> Rabbit["RabbitMQ"]
     Auth --> Rabbit
     Matching --> Rabbit
-    Rabbit --> Workers["Consumers / Celery Workers"]
+    Rabbit --> Workers["Consumers / Task Handlers"]
     Workers --> MatchingDb
 ```
 

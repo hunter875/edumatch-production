@@ -1,5 +1,5 @@
 """
-Celery workers for processing RabbitMQ events
+Task-compatible handlers for processing RabbitMQ events
 """
 import logging
 import json

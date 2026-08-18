@@ -1,6 +1,6 @@
 """
 RabbitMQ Event Consumer
-Listens to RabbitMQ queues and dispatches to Celery workers
+Listens to RabbitMQ queues and dispatches to matching task handlers.
 """
 import pika
 import json
@@ -158,7 +158,7 @@ class RabbitMQConsumer:
             logger.info(f"📨 Received message with routing_key: {routing_key}")
             logger.debug(f"Message content: {message}")
             
-            # Dispatch to appropriate Celery task
+            # Dispatch to the appropriate task-compatible handler.
             handler = self.event_handlers.get(routing_key)
             
             if handler:

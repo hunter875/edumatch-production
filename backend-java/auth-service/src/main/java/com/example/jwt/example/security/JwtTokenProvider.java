@@ -16,12 +16,9 @@ import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.util.StreamUtils;
 
-import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
@@ -51,6 +48,9 @@ public class JwtTokenProvider {
     @Value("${app.jwt.rsa.public-key-path:#{null}}")
     private Resource rsaPublicKeyPath;
 
+    @Value("${app.jwt.require-rsa:false}")
+    private boolean requireRsa;
+
     private Key signingKey;
     private Key verificationKey;
     private SignatureAlgorithm signatureAlgorithm;
@@ -79,10 +79,16 @@ public class JwtTokenProvider {
 
                 log.info("JWT initialized with RS256 (RSA key pair)");
             } catch (Exception e) {
-                log.error("Failed to load RSA keys, falling back to HS256: {}", e.getMessage());
+                if (requireRsa) {
+                    throw new IllegalStateException("RSA JWT keys are required but could not be loaded", e);
+                }
+                log.error("Failed to load RSA keys; falling back to HS256 because app.jwt.require-rsa=false: {}", e.getMessage());
                 initHS256();
             }
         } else {
+            if (requireRsa) {
+                throw new IllegalStateException("RSA JWT keys are required but no key paths were configured");
+            }
             initHS256();
         }
     }

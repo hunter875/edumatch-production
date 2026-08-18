@@ -23,7 +23,7 @@ The project is built as a multi-service system to practice backend architecture,
 | Frontend | Next.js, React, TypeScript, Tailwind CSS, React Query |
 | Backend | Java Spring Boot, FastAPI |
 | Databases | MySQL, PostgreSQL, Redis |
-| Messaging / Workers | RabbitMQ, Celery |
+| Messaging / Workers | RabbitMQ, inline matching consumers, Celery-compatible task handlers |
 | Auth | JWT, role-based access control |
 | Gateway / Infra | Nginx, Docker, Docker Compose |
 | CI/CD | GitHub Actions, Azure Container Apps |
@@ -50,7 +50,7 @@ flowchart LR
     SCH --> MQ
     CHAT --> MQ
     MATCH --> MQ
-    MQ --> WORKER["Matching Consumer / Celery Worker"]
+    MQ --> WORKER["Matching Consumer<br/>Task Handlers"]
     WORKER --> MATCHDB
 ```
 
@@ -84,7 +84,7 @@ Current matching flow:
 4. Support batch scoring for scholarship cards.
 5. Store applicant-opportunity scores in `matching_scores`.
 6. Store top-N recommendations in `recommendation_cache`.
-7. Use worker/event processing to refresh matching features and cached recommendations.
+7. Use RabbitMQ consumer/event processing to refresh matching features and cached recommendations.
 
 The project does not call an LLM in the hot path. If AI is added later, the intended use is offline profile parsing, skill normalization, embeddings, and cached explanations.
 
@@ -224,7 +224,7 @@ Implemented:
 - Auth, scholarship, application, bookmark, chat, notification, admin, and provider flows.
 - Matching service with rule-based scoring, batch score API, and recommendation cache.
 - Seed data for local testing and load-test scenarios.
-- Docker Compose local environment and deployment workflow draft.
+- Docker Compose local environment, CI validation, and manual deployment workflow draft.
 
 Known next steps:
 
@@ -240,3 +240,4 @@ Known next steps:
 - Use `.env.example` as the only committed environment template.
 - Rotate any local credentials that were accidentally exposed.
 - Keep JWT secrets and cloud credentials in GitHub/Azure secrets for deployment.
+- Set `APP_JWT_REQUIRE_RSA=true` in production-like environments once RSA keys are configured; local and test profiles may keep HS256.

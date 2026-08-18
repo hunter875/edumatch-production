@@ -111,8 +111,8 @@ Vai tro:
 - FastAPI
 - PostgreSQL
 - SQLAlchemy
-- Celery worker
 - RabbitMQ consumer
+- Task-compatible matching handlers
 - Score cache va recommendation cache
 
 Vai tro:
@@ -204,8 +204,8 @@ FE -> Gateway /api/opportunities
 Gateway -> Scholarship Service
 Scholarship Service -> MySQL
 Scholarship Service -> RabbitMQ scholarship.created
-Matching Consumer -> Celery task
-Worker -> precompute candidate recommendations
+Matching Consumer -> matching task handler
+Handler -> precompute candidate recommendations
 ```
 
 Important:

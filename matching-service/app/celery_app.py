@@ -25,5 +25,5 @@ celery_app.conf.update(
     worker_max_tasks_per_child=1000,  # Restart worker after 1000 tasks (prevent memory leaks)
 )
 
-# NOTE: We do NOT use task_routes here because the consumer handles
-# routing via RabbitMQ exchanges/queues. Tasks are called directly.
+# The RabbitMQ consumer owns event routing in the current deployment path.
+# Worker functions stay Celery-compatible, but event handlers are called inline.
