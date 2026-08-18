@@ -1,11 +1,6 @@
 name: Build and Deploy EduMatch System
 
 on:
-  push:
-    branches: [ "main" ]
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
   workflow_dispatch:
     inputs:
       operation:
@@ -93,7 +88,7 @@ jobs:
   # ============================================================
   validate:
     name: Validate before deploy
-    if: ${{ github.event_name == 'push' || github.event.inputs.operation == 'deploy' }}
+    if: ${{ github.event.inputs.operation == 'deploy' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -180,7 +175,7 @@ jobs:
   # ============================================================
   preflight-cloud:
     name: Preflight cloud secrets
-    if: ${{ github.event_name == 'push' || github.event.inputs.operation == 'deploy' }}
+    if: ${{ github.event.inputs.operation == 'deploy' }}
     needs: [validate, detect-changes]
     runs-on: ubuntu-latest
     environment:
