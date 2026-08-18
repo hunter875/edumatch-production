@@ -74,13 +74,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
-            body: JSON.stringify({
-              refreshToken: tokenStore.getRefreshToken() || '',
-            }),
           });
           if (!res.ok) return null;
           const data = await res.json();
-          if (data.refreshToken) tokenStore.setRefreshToken(data.refreshToken);
           return data.accessToken || null;
         });
 

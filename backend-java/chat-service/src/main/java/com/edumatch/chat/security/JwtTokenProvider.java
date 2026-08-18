@@ -15,11 +15,14 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StreamUtils;
 
+import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.security.KeyFactory;
+import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
@@ -132,10 +135,19 @@ public class JwtTokenProvider {
     }
 
     private Claims parseClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(verificationKey)
+        JwtParserBuilder parserBuilder = Jwts.parser()
                 .clockSkewSeconds(30)
-                .build()
+                .requireIssuer(expectedIssuer);
+
+        if (verificationKey instanceof SecretKey secretKey) {
+            parserBuilder.verifyWith(secretKey);
+        } else if (verificationKey instanceof PublicKey publicKey) {
+            parserBuilder.verifyWith(publicKey);
+        } else {
+            throw new IllegalStateException("Unsupported JWT verification key type");
+        }
+
+        return parserBuilder.build()
                 .parseSignedClaims(token)
                 .getPayload();
     }
