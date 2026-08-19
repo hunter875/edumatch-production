@@ -153,3 +153,19 @@ class RecommendationCache(Base):
             f"<RecommendationCache(target='{self.target_type}:{self.target_id}', "
             f"candidate='{self.candidate_type}:{self.candidate_id}', score={self.matching_score})>"
         )
+
+
+class ProcessedEvent(Base):
+    """Ledger for at-least-once broker delivery de-duplication."""
+    __tablename__ = "processed_events"
+
+    event_id = Column(String(36), primary_key=True)
+    routing_key = Column(String(255), nullable=False)
+    status = Column(String(30), nullable=False, default="PROCESSING")
+    first_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    processed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (
+        Index("ix_processed_events_routing_key", "routing_key"),
+        Index("ix_processed_events_status", "status"),
+    )

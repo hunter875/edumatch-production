@@ -9,6 +9,7 @@ import time
 from tenacity import retry, wait_fixed, stop_after_attempt, retry_if_exception_type
 
 from .config import settings
+from .event_dedup import claim_event, mark_event_processed, release_event_claim
 from .workers import (
     process_user_profile_updated,
     process_scholarship_created,
@@ -140,6 +141,7 @@ class RabbitMQConsumer:
     
     def callback(self, ch, method, properties, body):
         """Handle incoming messages"""
+        event_id = None
         try:
             # Try to parse as JSON first (Spring Boot with Jackson2JsonMessageConverter)
             if properties.content_type == 'application/json':
@@ -154,6 +156,7 @@ class RabbitMQConsumer:
                     return
             
             routing_key = method.routing_key
+            event_id = message.get("event_id") or getattr(properties, "message_id", None)
             
             logger.info(f"📨 Received message with routing_key: {routing_key}")
             logger.debug(f"Message content: {message}")
@@ -162,6 +165,9 @@ class RabbitMQConsumer:
             handler = self.event_handlers.get(routing_key)
             
             if handler:
+                if event_id and not claim_event(str(event_id), routing_key):
+                    ch.basic_ack(delivery_tag=method.delivery_tag)
+                    return
                 # Execute task directly WITHOUT Celery routing (avoid queue declaration conflicts)
                 # We just call the task function directly since we're already in the consumer
                 try:
@@ -170,6 +176,8 @@ class RabbitMQConsumer:
                 except Exception as task_error:
                     logger.error(f"❌ Task execution failed: {task_error}", exc_info=True)
                     raise  # Re-raise to trigger nack and requeue
+                if event_id:
+                    mark_event_processed(str(event_id))
             else:
                 logger.warning(f"⚠️ No handler found for routing_key: {routing_key}")
             
@@ -182,6 +190,8 @@ class RabbitMQConsumer:
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             
         except Exception as e:
+            if event_id:
+                release_event_claim(str(event_id))
             retry_count = self._get_retry_count(properties)
             logger.error(
                 "Error processing message (retry %s/3): %s", retry_count, e, exc_info=True,
