@@ -227,7 +227,9 @@ Ghi nho:
 
 - Create/update scholarship khong nen doi matching tinh xong moi tra response.
 - Matching refresh la side effect async.
-- Neu RabbitMQ fail, can log/retry/DLQ de khong mat event.
+- Event delivery la at-least-once, khong claim exactly-once.
+- Scholarship outbox gan `event_id` duy nhat; consumer luu `processed_events` de duplicate delivery khong tao side effect lan hai.
+- Neu RabbitMQ fail, publisher retry co gioi han; message/record loi dai han di vao DLQ hoac trang thai failed de operator xu ly.
 
 ## 8. Admin Moderate Scholarship
 
@@ -379,4 +381,3 @@ Ghi nho:
 4. Notification khong hien realtime: xem Chat service, WebSocket subscribe, RabbitMQ notification event.
 5. Data da write nhung read chua thay trong recommendation: co the do eventual consistency.
 6. Cross-service call loi 503: xem Auth service, Redis cache, requestId trace.
-

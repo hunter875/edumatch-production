@@ -170,6 +170,14 @@ JWT_ALGORITHM=HS256
 CELERY_BROKER_URL=amqp://<rabbitmq-user>:<rabbitmq-password>@rabbitmq:5672//
 ```
 
+For staging/production, do not deploy HS256 fallback:
+
+```txt
+JWT_REQUIRE_RSA=true
+JWT_ALGORITHM=RS256
+JWT_PUBLIC_KEY=<PEM public key secret>
+```
+
 ### Chat Service
 
 ```txt
