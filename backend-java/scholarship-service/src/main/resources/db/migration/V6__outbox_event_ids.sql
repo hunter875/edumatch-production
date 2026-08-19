@@ -1,7 +1,3 @@
-ALTER TABLE applications
-    ADD CONSTRAINT uk_applications_applicant_opportunity
-        UNIQUE (applicant_user_id, opportunity_id);
-
 ALTER TABLE outbox_events
     ADD COLUMN event_id VARCHAR(36) NULL;
 
