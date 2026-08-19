@@ -240,7 +240,7 @@ jobs:
           if [[ "$MATCHING_REQUIRED" == "true" ]]; then
             check_app_secrets matching-service \
               matching-db-url rabbitmq-host rabbitmq-user rabbitmq-password \
-              jwt-secret jwt-public-key celery-broker-url
+              jwt-secret jwt-public-key
           fi
 
   # ============================================================
@@ -636,8 +636,6 @@ jobs:
             JWT_REQUIRE_RSA=true
             JWT_PUBLIC_KEY=secretref:jwt-public-key
             JWT_ALGORITHM=RS256
-            CELERY_BROKER_URL=secretref:celery-broker-url
-            CELERY_RESULT_BACKEND=rpc://
             DEBUG=false
             RUN_MIGRATIONS=true
             AUTO_CREATE_TABLES=false
@@ -663,8 +661,6 @@ jobs:
               JWT_REQUIRE_RSA=true \
               JWT_PUBLIC_KEY=secretref:jwt-public-key \
               JWT_ALGORITHM=RS256 \
-              CELERY_BROKER_URL=secretref:celery-broker-url \
-              CELERY_RESULT_BACKEND=rpc:// \
               DEBUG=false \
               RUN_MIGRATIONS=true \
               AUTO_CREATE_TABLES=false \

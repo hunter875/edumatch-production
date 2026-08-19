@@ -1,6 +1,6 @@
 """
 RabbitMQ Event Consumer
-Listens to RabbitMQ queues and dispatches to matching task handlers.
+Listens to RabbitMQ queues and dispatches to matching event handlers.
 """
 import pika
 import json
@@ -161,18 +161,16 @@ class RabbitMQConsumer:
             logger.info(f"📨 Received message with routing_key: {routing_key}")
             logger.debug(f"Message content: {message}")
             
-            # Dispatch to the appropriate task-compatible handler.
+            # Dispatch to the appropriate RabbitMQ handler.
             handler = self.event_handlers.get(routing_key)
             
             if handler:
                 if event_id and not claim_event(str(event_id), routing_key):
                     ch.basic_ack(delivery_tag=method.delivery_tag)
                     return
-                # Execute task directly WITHOUT Celery routing (avoid queue declaration conflicts)
-                # We just call the task function directly since we're already in the consumer
                 try:
                     result = handler(message)
-                    logger.info(f"✅ Executed task for routing_key: {routing_key}")
+                    logger.info(f"✅ Executed handler for routing_key: {routing_key}")
                 except Exception as task_error:
                     logger.error(f"❌ Task execution failed: {task_error}", exc_info=True)
                     raise  # Re-raise to trigger nack and requeue

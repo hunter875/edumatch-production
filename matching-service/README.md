@@ -17,7 +17,7 @@ Matching Service là microservice lõi chịu trách nhiệm:
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │   FastAPI    │  │ Task Handler │  │   RabbitMQ   │     │
+│  │   FastAPI    │  │ Event Handler│  │   RabbitMQ   │     │
 │  │  API Server  │  │   Modules    │  │   Consumer   │     │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │
 │         │                 │                 │              │
@@ -37,14 +37,14 @@ Matching Service là microservice lõi chịu trách nhiệm:
    - `GET /api/v1/recommendations/applicant/{id}` - Gợi ý cho applicant (2-5s)
    - `GET /api/v1/recommendations/opportunity/{id}` - Gợi ý cho opportunity (2-5s)
 
-2. **Task-compatible handlers**: Background feature processing
+2. **RabbitMQ event handlers**: Background feature processing
    - Xử lý event `user.profile.updated`
    - Xử lý event `scholarship.created`
    - Xử lý event `scholarship.updated`
 
 3. **RabbitMQ Consumer**: Event listener
    - Lắng nghe events từ RabbitMQ
-   - Gọi matching task handlers trong consumer process hiện tại
+   - Gọi matching event handlers trong consumer process hiện tại
 
 4. **PostgreSQL**: Feature storage
    - Lưu applicant_features
@@ -55,7 +55,6 @@ Matching Service là microservice lõi chịu trách nhiệm:
 
 - **Python 3.10+**
 - **FastAPI** - Modern async web framework
-- **Celery** - Task decorator/config compatibility for future queue-backed workers
 - **RabbitMQ** - Message broker
 - **PostgreSQL** - Relational database
 - **SQLAlchemy** - ORM
@@ -73,10 +72,7 @@ pip install -r requirements.txt
 # Run API server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-# Optional: run Celery worker if the deployment is switched to queue-backed tasks
-celery -A app.celery_app worker --loglevel=info
-
-# Run RabbitMQ consumer (terminal 2 in the current deployment path)
+# Run RabbitMQ consumer (terminal 2)
 python -m app.consumer
 ```
 
@@ -88,7 +84,6 @@ docker-compose up -d
 
 # View logs
 docker-compose logs -f matching-service
-docker-compose logs -f matching-celery-worker
 docker-compose logs -f matching-consumer
 
 # Stop services
@@ -260,7 +255,7 @@ RabbitMQ (event: user.profile.updated)
    │ (2) Consumer receives event
    │
    ▼
-Celery Worker
+matching-consumer
    │
    │ (3) Preprocess features
    │     - Vectorize skills
@@ -399,7 +394,8 @@ Environment variables (`.env`):
 ```env
 DATABASE_URL=postgresql://user:pass@host:5432/db
 RABBITMQ_HOST=rabbitmq
-CELERY_BROKER_URL=amqp://<rabbitmq-user>:<rabbitmq-password>@rabbitmq:5672//
+RABBITMQ_USER=<rabbitmq-user>
+RABBITMQ_PASSWORD=<rabbitmq-password>
 DEBUG=false
 TFIDF_MAX_FEATURES=1000
 RECOMMENDATION_DEFAULT_LIMIT=10
@@ -413,8 +409,8 @@ RECOMMENDATION_DEFAULT_LIMIT=10
 # Scale API servers
 docker-compose up -d --scale matching-service=3
 
-# Scale workers
-docker-compose up -d --scale matching-celery-worker=5
+# Scale RabbitMQ consumers
+docker-compose --profile workers up -d --scale matching-consumer=5 matching-consumer
 ```
 
 ### Monitoring:
@@ -446,7 +442,7 @@ docker-compose up -d --scale matching-celery-worker=5
 docker exec rabbitmq rabbitmqctl list_queues
 
 # Check worker logs
-docker-compose logs matching-celery-worker
+docker-compose logs matching-consumer
 ```
 
 ### API slow

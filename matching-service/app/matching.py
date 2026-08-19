@@ -448,7 +448,7 @@ class MatchingEngine:
             logger.error(f"Error calculating cosine similarity: {e}")
             return 0.5
     
-    # ========== Feature Preprocessing (for Celery workers) ==========
+    # ========== Feature Preprocessing (for RabbitMQ event handlers) ==========
     
     def preprocess_text_features(
         self,
@@ -457,7 +457,7 @@ class MatchingEngine:
         additional_text: str = ""
     ) -> Dict:
         """
-        Tiền xử lý text thành vectors (chạy trong Celery worker)
+        Tiền xử lý text thành vectors (chạy trong RabbitMQ consumer)
         
         Returns:
             Dict with 'combined_text', 'skills_vector', 'research_vector'

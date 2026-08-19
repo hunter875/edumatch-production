@@ -39,8 +39,7 @@ flowchart LR
   Scholarship --> Rabbit
   Matching --> Rabbit
   Rabbit --> Consumer["matching-consumer"]
-  Consumer --> Celery["Celery Worker"]
-  Celery --> MatchingDB
+  Consumer --> MatchingDB
   Rabbit --> Chat
 ```
 
@@ -356,4 +355,3 @@ Use these before adding any new technology:
 - Can local Docker still run on a weak machine?
 - What operational docs must be added?
 - What test proves the change works?
-

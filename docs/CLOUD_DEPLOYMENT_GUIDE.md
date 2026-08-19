@@ -226,7 +226,6 @@ Chay voi placeholder nhu sau. Khong paste secret that vao tai lieu.
   -RedisHost "redis" `
   -AuthServiceUrl "http://auth-service" `
   -MatchingServiceUrl "http://matching-service" `
-  -CeleryBrokerUrl "amqp://<rabbitmq-user>:<rabbitmq-password>@rabbitmq:5672//" `
   -MailUsername "<mail-user-or-disabled>" `
   -MailPassword "<mail-password-or-disabled>"
 ```

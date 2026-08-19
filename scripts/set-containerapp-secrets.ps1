@@ -43,9 +43,6 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$MatchingServiceUrl,
 
-    [Parameter(Mandatory=$true)]
-    [string]$CeleryBrokerUrl,
-
     [string]$MailUsername = "disabled@example.com",
     [string]$MailPassword = "disabled"
 )
@@ -124,8 +121,7 @@ Write-Host "Setting Azure Container App secrets in $ResourceGroup..."
         rabbitmq-host="$RabbitMqHost" `
         rabbitmq-user="$RabbitMqUser" `
         rabbitmq-password="$RabbitMqPassword" `
-        jwt-secret="$JwtSecret" `
-        celery-broker-url="$CeleryBrokerUrl" | Out-Null
+        jwt-secret="$JwtSecret" | Out-Null
 
 Write-Host "Secrets set. Current secret names:"
 & $AzCommand containerapp secret list --resource-group $ResourceGroup --name auth-service --query "[].name" -o table

@@ -8,7 +8,6 @@ os.environ["RABBITMQ_HOST"] = "localhost"
 os.environ["RABBITMQ_USER"] = "test"
 os.environ["RABBITMQ_PASSWORD"] = "test"
 os.environ["JWT_SECRET"] = "test_secret"
-os.environ["CELERY_BROKER_URL"] = "amqp://test:test@localhost:5672//"
 
 from app.config import Settings
 

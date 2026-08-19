@@ -169,7 +169,7 @@ Dung thu tu nay, dung nhay vao code ngay:
 
 7. Async worker
    - RabbitMQ queue co backlog khong?
-   - matching-consumer/celery-worker co loi khong?
+   - matching-consumer co loi khong?
    - DLQ/retry co bi loop khong?
 ```
 
@@ -1368,7 +1368,7 @@ Recommendation khong cap nhat:
 ```txt
 Check RabbitMQ queue.
 Check matching-consumer log.
-Check celery-worker log.
+Check matching-consumer log.
 Check matching_db recommendation_cache.
 ```
 

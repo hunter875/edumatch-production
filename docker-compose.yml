@@ -156,7 +156,6 @@ services:
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
       - JWT_SECRET=${EDUMATCH_JWT_SECRET:?Set EDUMATCH_JWT_SECRET in .env}
       - JWT_ALGORITHM=HS256
-      - CELERY_BROKER_URL=amqp://${RABBITMQ_USERNAME:?Set RABBITMQ_USERNAME in .env}:${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}@rabbitmq:5672//
       - RUN_MIGRATIONS=true
       - AUTO_CREATE_TABLES=false
       - OTEL_SERVICE_NAME=matching-service
@@ -201,8 +200,6 @@ services:
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
       - JWT_SECRET=${EDUMATCH_JWT_SECRET:?Set EDUMATCH_JWT_SECRET in .env}
       - JWT_ALGORITHM=HS256
-      - CELERY_BROKER_URL=amqp://${RABBITMQ_USERNAME:?Set RABBITMQ_USERNAME in .env}:${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}@rabbitmq:5672//
-      - CELERY_RESULT_BACKEND=rpc://
       - RUN_MIGRATIONS=false
       - AUTO_CREATE_TABLES=false
       - OTEL_SERVICE_NAME=matching-consumer
@@ -227,49 +224,6 @@ services:
           memory: 256M
         reservations:
           memory: 64M
-
-  # === CELERY WORKER (Process async tasks) ===
-  celery-worker:
-    profiles:
-      - workers
-    build:
-      context: ./matching-service
-      dockerfile: Dockerfile
-    container_name: celery-worker-test
-    environment:
-      - DATABASE_URL=postgresql://matching_user:${MATCHING_DB_PASSWORD:?Set MATCHING_DB_PASSWORD in .env}@matching-db:5432/matching_db
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_PORT=5672
-      - RABBITMQ_USER=${RABBITMQ_USERNAME:?Set RABBITMQ_USERNAME in .env}
-      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}
-      - JWT_SECRET=${EDUMATCH_JWT_SECRET:?Set EDUMATCH_JWT_SECRET in .env}
-      - JWT_ALGORITHM=HS256
-      - CELERY_BROKER_URL=amqp://${RABBITMQ_USERNAME:?Set RABBITMQ_USERNAME in .env}:${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD in .env}@rabbitmq:5672//
-      - CELERY_RESULT_BACKEND=rpc://
-      - RUN_MIGRATIONS=false
-      - AUTO_CREATE_TABLES=false
-      - OTEL_SERVICE_NAME=matching-worker
-      - APPLICATIONINSIGHTS_CONNECTION_STRING=${APPLICATIONINSIGHTS_CONNECTION_STRING:-}
-      - APP_VERSION=${APP_VERSION:-local}
-      - GIT_COMMIT=${GIT_COMMIT:-local}
-      - DEPLOY_ENVIRONMENT=${DEPLOY_ENVIRONMENT:-local}
-    depends_on:
-      matching-db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - test-network
-    command: celery -A app.celery_app worker --loglevel=info
-    healthcheck:
-      disable: true
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 300M
-        reservations:
-          memory: 128M
 
   # === MATCHING DATABASE (PostgreSQL for Matching Service) ===
   matching-db:

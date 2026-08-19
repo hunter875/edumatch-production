@@ -7,7 +7,7 @@
 **Framework**: FastAPI + Python 3.11  
 **Database**: PostgreSQL 15  
 **Message Queue**: RabbitMQ  
-**Task Queue**: Celery  
+**Background Worker**: RabbitMQ consumer
 **Cache**: Redis  
 **Purpose**: AI-powered matching giữa students và scholarships
 
@@ -28,8 +28,7 @@ matching-service/
 │   ├── matching.py                # Matching algorithm
 │   ├── service.py                 # Business logic
 │   ├── consumer.py                # RabbitMQ consumer
-│   ├── workers.py                 # Celery workers
-│   └── celery_app.py             # Celery configuration
+│   └── workers.py                 # RabbitMQ event handlers
 ├── requirements.txt               # Python dependencies
 ├── Dockerfile                     # Container image
 └── README.md                      # Service documentation
@@ -255,7 +254,7 @@ Authorization: Bearer <token>
 **Response** (202 Accepted):
 ```json
 {
-  "taskId": "celery-task-id-here",
+  "jobId": "rabbitmq-event-or-batch-id",
   "status": "PROCESSING",
   "message": "Batch matching started"
 }
@@ -388,7 +387,7 @@ Authorization: Bearer <token>
   "database": "connected",
   "rabbitmq": "connected",
   "redis": "connected",
-  "celery": "running",
+  "consumer": "running",
   "version": "1.0.0"
 }
 ```
@@ -642,17 +641,16 @@ def cosine_similarity(vec1, vec2) -> float:
 
 ---
 
-## ⚙️ Celery Workers
+## ⚙️ RabbitMQ Consumers
 
-### Background Tasks
+### Background Event Handlers
 
 #### refresh_all_matches
 **Description**: Recalculate matches for all users (scheduled daily)
 
-**Schedule**: Every day at 2 AM
+**Trigger**: operator/manual job
 
 ```python
-@celery.task
 def refresh_all_matches():
     users = db.query(UserProfile).filter(role='STUDENT').all()
     
@@ -669,7 +667,6 @@ def refresh_all_matches():
 **Description**: Calculate matches for specific scholarships
 
 ```python
-@celery.task
 def calculate_batch_matches(scholarship_ids, min_score=0.6):
     results = []
     
@@ -691,10 +688,9 @@ def calculate_batch_matches(scholarship_ids, min_score=0.6):
 #### cleanup_old_matches
 **Description**: Remove matches for expired scholarships
 
-**Schedule**: Every week
+**Trigger**: operator/manual job
 
 ```python
-@celery.task
 def cleanup_old_matches():
     expired = db.query(Scholarship).filter(
         deadline < datetime.now()
@@ -723,10 +719,6 @@ RABBITMQ_URL=amqp://<rabbitmq-user>:<rabbitmq-password>@localhost:5672/
 
 # Redis
 REDIS_URL=redis://localhost:6379/0
-
-# Celery
-CELERY_BROKER_URL=amqp://<rabbitmq-user>:<rabbitmq-password>@localhost:5672/
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
 
 # JWT
 JWT_SECRET=same-as-auth-service
@@ -848,7 +840,6 @@ def update_user_profile(user_id, profile_data):
 - FastAPI Documentation
 - Sentence Transformers
 - pgvector Extension
-- Celery Documentation
 - RabbitMQ Python Client
 
 ---

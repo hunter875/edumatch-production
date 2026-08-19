@@ -167,7 +167,6 @@ RABBITMQ_USER=<rabbitmq-user>
 RABBITMQ_PASSWORD=<rabbitmq-password>
 JWT_SECRET=<secret>
 JWT_ALGORITHM=HS256
-CELERY_BROKER_URL=amqp://<rabbitmq-user>:<rabbitmq-password>@rabbitmq:5672//
 ```
 
 For staging/production, do not deploy HS256 fallback:
@@ -263,8 +262,7 @@ After provisioning, set real dependency secrets. Do not commit secret values.
   -RabbitMqPassword "<rabbitmq-password>" `
   -RedisHost "<redis-host>" `
   -AuthServiceUrl "https://<auth-service-fqdn>" `
-  -MatchingServiceUrl "https://<matching-service-fqdn>" `
-  -CeleryBrokerUrl "amqp://<rabbitmq-user>:<rabbitmq-password>@<rabbitmq-host>:5672//"
+  -MatchingServiceUrl "https://<matching-service-fqdn>"
 ```
 
 Check provisioned app FQDNs:
@@ -399,7 +397,6 @@ matching-service:
   rabbitmq-user
   rabbitmq-password
   jwt-secret
-  celery-broker-url
 ```
 
 The deploy workflow now has a cloud preflight job. It fails before deploy if required GitHub secrets or Azure Container App secret references are missing.
