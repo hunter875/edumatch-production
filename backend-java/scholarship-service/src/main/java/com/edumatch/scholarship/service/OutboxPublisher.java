@@ -3,17 +3,23 @@ package com.edumatch.scholarship.service;
 import com.edumatch.scholarship.model.OutboxEvent;
 import com.edumatch.scholarship.repository.OutboxEventRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @ConditionalOnBean(RabbitTemplate.class)
@@ -27,6 +33,9 @@ public class OutboxPublisher {
     private final OutboxEventRepository outboxEventRepository;
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
+
+    @Value("${app.outbox.publisher-confirm-timeout-ms:5000}")
+    private long publisherConfirmTimeoutMs;
 
     @Scheduled(fixedDelayString = "${app.outbox.publish-delay-ms:5000}")
     @Transactional
@@ -43,8 +52,14 @@ public class OutboxPublisher {
 
     private void publishOne(OutboxEvent event) {
         try {
-            Object payload = objectMapper.readValue(event.getPayload(), Object.class);
-            rabbitTemplate.convertAndSend(event.getExchangeName(), event.getRoutingKey(), payload);
+            Object payload = payloadWithEventId(event);
+            CorrelationData correlationData = new CorrelationData(event.getEventId());
+            rabbitTemplate.convertAndSend(event.getExchangeName(), event.getRoutingKey(), payload, correlationData);
+            CorrelationData.Confirm confirm = correlationData.getFuture()
+                    .get(publisherConfirmTimeoutMs, TimeUnit.MILLISECONDS);
+            if (!confirm.isAck()) {
+                throw new AmqpException("Broker did not confirm outbox event: " + confirm.getReason());
+            }
 
             event.setStatus(OutboxEvent.STATUS_PUBLISHED);
             event.setPublishedAt(LocalDateTime.now());
@@ -86,6 +101,13 @@ public class OutboxPublisher {
         }
 
         outboxEventRepository.save(event);
+    }
+
+    private Object payloadWithEventId(OutboxEvent event) throws JsonProcessingException {
+        Map<String, Object> payload = objectMapper.readValue(event.getPayload(), new TypeReference<>() {
+        });
+        payload.putIfAbsent("event_id", event.getEventId());
+        return payload;
     }
 
     private String truncate(String value) {
