@@ -108,6 +108,19 @@ jobs:
   compose-config:
     name: Docker Compose config
     runs-on: ubuntu-latest
+    env:
+      AUTH_DB_ROOT_PASSWORD: ci-auth-root-password
+      AUTH_DB_PASSWORD: ci-auth-db-password
+      SCHOLARSHIP_DB_ROOT_PASSWORD: ci-scholarship-root-password
+      SCHOLARSHIP_DB_PASSWORD: ci-scholarship-db-password
+      CHAT_DB_ROOT_PASSWORD: ci-chat-root-password
+      CHAT_DB_PASSWORD: ci-chat-db-password
+      MATCHING_DB_PASSWORD: ci-matching-db-password
+      EDUMATCH_JWT_SECRET: ci-jwt-secret-with-at-least-32-characters
+      RABBITMQ_USERNAME: ci-rabbitmq-user
+      RABBITMQ_PASSWORD: ci-rabbitmq-password
+      SPRING_MAIL_USERNAME: ci@example.invalid
+      SPRING_MAIL_PASSWORD: ci-mail-password
     steps:
       - uses: actions/checkout@v4
 
