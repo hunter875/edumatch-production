@@ -123,18 +123,19 @@ public class AuthService {
 
         return refreshTokenService.findByToken(rawRefreshToken)
                 .map(refreshTokenService::verifyExpiration)
-                .map(RefreshToken::getUser)
-                .map(user -> {
+                .map(refreshToken -> {
+                    User user = refreshToken.getUser();
                     String newToken = tokenProvider.generateTokenFromUser(user);
 
-                    // Rotate: revoke old, create new
-                    refreshTokenService.revokeByToken(rawRefreshToken);
-                    RefreshToken newRefreshToken = refreshTokenService.createRefreshToken(user.getId());
+                    RefreshToken newRefreshToken = refreshTokenService.rotateRefreshToken(refreshToken, rawRefreshToken);
 
                     log.info("Access token refreshed and refresh token rotated for user: {}", user.getUsername());
                     return new AuthResult(newToken, newRefreshToken.getToken());
                 })
                 .orElseThrow(() -> {
+                    if (refreshTokenService.revokeActiveTokenIfReuseDetected(rawRefreshToken)) {
+                        return new BadRequestException("Refresh token reuse detected. Please sign in again.");
+                    }
                     log.error("Refresh token validation failed");
                     return new ResourceNotFoundException("RefreshToken", "token", "[REDACTED]");
                 });

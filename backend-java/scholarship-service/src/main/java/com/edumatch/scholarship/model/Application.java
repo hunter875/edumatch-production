@@ -10,7 +10,13 @@ import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "applications")
+@Table(
+        name = "applications",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_applications_applicant_opportunity",
+                columnNames = {"applicant_user_id", "opportunity_id"}
+        )
+)
 @Getter
 @Setter
 @NoArgsConstructor

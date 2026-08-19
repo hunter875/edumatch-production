@@ -1,8 +1,10 @@
 package com.example.jwt.example.service;
 
 import com.example.jwt.example.model.RefreshToken;
+import com.example.jwt.example.model.RevokedRefreshToken;
 import com.example.jwt.example.model.User;
 import com.example.jwt.example.repository.RefreshTokenRepository;
+import com.example.jwt.example.repository.RevokedRefreshTokenRepository;
 import com.example.jwt.example.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +25,7 @@ import java.util.Optional;
 public class RefreshTokenService {
 
     private final RefreshTokenRepository refreshTokenRepository;
+    private final RevokedRefreshTokenRepository revokedRefreshTokenRepository;
     private final UserRepository userRepository;
 
     @Value("${app.jwtRefreshExpirationMs}")
@@ -66,6 +69,17 @@ public class RefreshTokenService {
         return refreshTokenRepository.findByToken(hash);
     }
 
+    public boolean revokeActiveTokenIfReuseDetected(String rawToken) {
+        String hash = sha256(rawToken);
+        return revokedRefreshTokenRepository.findByTokenHash(hash)
+                .map(revoked -> {
+                    refreshTokenRepository.deleteByUser(revoked.getUser());
+                    log.warn("Detected refresh-token reuse for user id={}; active token revoked", revoked.getUser().getId());
+                    return true;
+                })
+                .orElse(false);
+    }
+
     /**
      * Verify the token has not expired.
      */
@@ -84,6 +98,27 @@ public class RefreshTokenService {
     public int revokeByToken(String rawToken) {
         String hash = sha256(rawToken);
         return refreshTokenRepository.deleteByToken(hash);
+    }
+
+    @Transactional
+    public RefreshToken rotateRefreshToken(RefreshToken currentToken, String rawCurrentToken) {
+        String oldHash = sha256(rawCurrentToken);
+        String rawNewToken = generateRawToken();
+        String newHash = sha256(rawNewToken);
+
+        revokedRefreshTokenRepository.save(RevokedRefreshToken.builder()
+                .tokenHash(oldHash)
+                .user(currentToken.getUser())
+                .replacedByHash(newHash)
+                .revokedAt(Instant.now())
+                .expiresAt(currentToken.getExpiryDate())
+                .build());
+
+        currentToken.setToken(newHash);
+        currentToken.setExpiryDate(Instant.now().plusMillis(refreshTokenDurationMs));
+        RefreshToken saved = refreshTokenRepository.save(currentToken);
+        saved.setToken(rawNewToken);
+        return saved;
     }
 
     /**

@@ -100,6 +100,12 @@ public class ApplicationService {
         // --- 3. Validate request fields ---
         validateCreateApplicationRequest(request);
 
+        applicationRepository
+                .findFirstByApplicantUserIdAndOpportunityId(actor.getId(), request.getOpportunityId())
+                .ifPresent(existing -> {
+                    throw new ConflictException("Applicant already applied to this scholarship.");
+                });
+
         // --- 4. Build application with identity from auth profile ---
         Application app = new Application();
         app.setApplicantUserId(actor.getId());

@@ -37,6 +37,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -153,6 +155,48 @@ class SearchEndpointSecurityTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(idempotencyService);
+        verifyNoInteractions(applicationService);
+    }
+
+    @Test
+    @WithMockUser(authorities = "ROLE_USER")
+    void updateScholarshipRejectsStudentBeforeService() throws Exception {
+        mockMvc.perform(patch("/api/v1/scholarships/7")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"x\"}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(scholarshipService);
+    }
+
+    @Test
+    @WithMockUser(authorities = "ROLE_USER")
+    void deleteScholarshipRejectsStudentBeforeService() throws Exception {
+        mockMvc.perform(delete("/api/v1/scholarships/7"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(scholarshipService);
+    }
+
+    @Test
+    @WithMockUser(authorities = "ROLE_EMPLOYER")
+    void adminModerationRejectsProviderBeforeService() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/scholarships/7/moderation")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"APPROVED\"}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(scholarshipService);
+    }
+
+    @Test
+    @WithMockUser(authorities = "ROLE_USER")
+    void adminApplicationStatusRejectsStudentBeforeService() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/applications/7/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"ACCEPTED\"}"))
+                .andExpect(status().isForbidden());
+
         verifyNoInteractions(applicationService);
     }
 

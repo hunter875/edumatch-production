@@ -37,8 +37,11 @@ class Settings(BaseSettings):
     # JWT Authentication (must match Auth Service settings)
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
+    JWT_REQUIRE_RSA: bool = False
+    JWT_PUBLIC_KEY: Optional[str] = None
     JWT_PUBLIC_KEY_PATH: Optional[str] = None  # RSA public key for RS256
     JWT_EXPECTED_ISSUER: Optional[str] = "edumatch-auth"  # validate iss claim
+    JWT_EXPECTED_AUDIENCE: str = "edumatch-api"
     
     # Celery
     CELERY_BROKER_URL: str

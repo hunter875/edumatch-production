@@ -51,6 +51,13 @@ class ForbiddenException(HTTPException):
 
 def _get_public_key():
     """Load RSA public key if configured. In production, HS256 fallback is DISABLED."""
+    if settings.JWT_PUBLIC_KEY:
+        try:
+            from cryptography.hazmat.primitives import serialization
+            return serialization.load_pem_public_key(settings.JWT_PUBLIC_KEY.encode("utf-8"))
+        except Exception as e:
+            logger.critical("JWT_PUBLIC_KEY set but failed to load RSA key: %s", e)
+            raise JWTAuthException(detail="Authentication configuration error")
     if settings.JWT_PUBLIC_KEY_PATH:
         try:
             from cryptography.hazmat.primitives import serialization
@@ -59,6 +66,9 @@ def _get_public_key():
         except Exception as e:
             logger.critical("JWT_PUBLIC_KEY_PATH set but failed to load RSA key: %s", e)
             raise JWTAuthException(detail="Authentication configuration error")
+    if settings.JWT_REQUIRE_RSA or settings.DEPLOY_ENVIRONMENT.lower() in {"staging", "production"}:
+        logger.critical("RSA JWT verification is required but no public key is configured")
+        raise JWTAuthException(detail="Authentication configuration error")
     # No public key configured — use shared secret (dev/test only)
     logger.warning("No RSA public key configured — using HS256 shared secret (NOT FOR PRODUCTION)")
     return settings.JWT_SECRET
@@ -96,7 +106,7 @@ def decode_jwt_token(token: str) -> dict:
             raise JWTAuthException(detail="Invalid token issuer")
 
         # Validate audience
-        expected_aud = getattr(settings, 'JWT_EXPECTED_AUDIENCE', 'edumatch-api')
+        expected_aud = settings.JWT_EXPECTED_AUDIENCE
         aud = payload.get("aud")
         if not aud or aud != expected_aud:
             raise JWTAuthException(detail="Invalid token audience")

@@ -12,6 +12,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Entity
 @Table(name = "outbox_events")
@@ -26,6 +27,9 @@ public class OutboxEvent {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(name = "event_id", nullable = false, unique = true, length = 36, updatable = false)
+    private String eventId;
 
     @Column(name = "exchange_name", nullable = false, length = 255)
     private String exchangeName;
@@ -73,6 +77,9 @@ public class OutboxEvent {
         }
         if (status == null) {
             status = STATUS_PENDING;
+        }
+        if (eventId == null || eventId.isBlank()) {
+            eventId = UUID.randomUUID().toString();
         }
     }
 

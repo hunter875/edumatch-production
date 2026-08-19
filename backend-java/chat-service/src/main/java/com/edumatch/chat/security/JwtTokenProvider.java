@@ -34,6 +34,9 @@ public class JwtTokenProvider {
     @Value("${app.jwt.rsa.public-key-path:#{null}}")
     private Resource rsaPublicKeyPath;
 
+    @Value("${app.jwt.rsa.public-key:}")
+    private String rsaPublicKeyPem;
+
     @Value("${app.jwt.expected-issuer:edumatch-auth}")
     private String expectedIssuer;
 
@@ -43,33 +46,54 @@ public class JwtTokenProvider {
     @Value("${app.jwt.require-rsa:false}")
     private boolean requireRsa;
 
+    @Value("${DEPLOY_ENVIRONMENT:local}")
+    private String deployEnvironment;
+
     private Key verificationKey;
+    private String expectedAlgorithm;
 
     @PostConstruct
     public void init() {
-        if (rsaPublicKeyPath != null) {
+        if (rsaPublicKeyPath != null || hasText(rsaPublicKeyPem)) {
             try {
-                String pubPem = StreamUtils.copyToString(rsaPublicKeyPath.getInputStream(), StandardCharsets.UTF_8)
+                String pubPem = readPublicKeyPem()
                         .replace("-----BEGIN PUBLIC KEY-----", "")
                         .replace("-----END PUBLIC KEY-----", "")
                         .replaceAll("\\s", "");
                 byte[] pubBytes = Base64.getDecoder().decode(pubPem);
                 KeyFactory keyFactory = KeyFactory.getInstance("RSA");
                 verificationKey = keyFactory.generatePublic(new X509EncodedKeySpec(pubBytes));
+                expectedAlgorithm = SignatureAlgorithm.RS256.getValue();
                 log.info("JWT verification initialized with RSA public key");
                 return;
             } catch (Exception e) {
-                if (requireRsa) {
+                if (rsaRequired()) {
                     throw new IllegalStateException("RSA JWT public key is required but could not be loaded", e);
                 }
                 log.error("Failed to load RSA public key; falling back to HS256 because app.jwt.require-rsa=false: {}", e.getMessage());
             }
         }
-        if (requireRsa) {
+        if (rsaRequired()) {
             throw new IllegalStateException("RSA JWT public key is required but no key path was configured");
         }
         verificationKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+        expectedAlgorithm = SignatureAlgorithm.HS256.getValue();
         log.warn("JWT verification initialized with HS256 shared secret — NOT for production");
+    }
+
+    private String readPublicKeyPem() throws Exception {
+        if (hasText(rsaPublicKeyPem)) {
+            return rsaPublicKeyPem;
+        }
+        return StreamUtils.copyToString(rsaPublicKeyPath.getInputStream(), StandardCharsets.UTF_8);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private boolean rsaRequired() {
+        return requireRsa || "staging".equalsIgnoreCase(deployEnvironment) || "production".equalsIgnoreCase(deployEnvironment);
     }
 
     public Authentication getAuthentication(String token) {
@@ -101,9 +125,8 @@ public class JwtTokenProvider {
             }
 
             // Validate audience
-            String aud = claims.get("aud", String.class);
-            if (aud == null || !aud.equals(expectedAudience)) {
-                log.warn("JWT audience missing or mismatch: expected={}, got={}", expectedAudience, aud);
+            if (!audienceMatches(claims, expectedAudience)) {
+                log.warn("JWT audience missing or mismatch: expected={}", expectedAudience);
                 return false;
             }
 
@@ -128,8 +151,21 @@ public class JwtTokenProvider {
             log.error("Expired JWT token");
         } catch (UnsupportedJwtException e) {
             log.error("Unsupported JWT token");
+        } catch (JwtException e) {
+            log.error("Invalid JWT claims");
         } catch (IllegalArgumentException e) {
             log.error("JWT claims string is empty");
+        }
+        return false;
+    }
+
+    private boolean audienceMatches(Claims claims, String expected) {
+        Object aud = claims.get("aud");
+        if (aud instanceof String value) {
+            return expected.equals(value);
+        }
+        if (aud instanceof Collection<?> values) {
+            return values.stream().anyMatch(expected::equals);
         }
         return false;
     }
@@ -147,8 +183,15 @@ public class JwtTokenProvider {
             throw new IllegalStateException("Unsupported JWT verification key type");
         }
 
-        return parserBuilder.build()
-                .parseSignedClaims(token)
-                .getPayload();
+        Jws<Claims> jwt = parserBuilder.build().parseSignedClaims(token);
+        return claimsFromExpectedAlgorithm(jwt);
+    }
+
+    private Claims claimsFromExpectedAlgorithm(Jws<Claims> jwt) {
+        String actualAlgorithm = jwt.getHeader().getAlgorithm();
+        if (!expectedAlgorithm.equals(actualAlgorithm)) {
+            throw new UnsupportedJwtException("Unexpected JWT algorithm: " + actualAlgorithm);
+        }
+        return jwt.getPayload();
     }
 }
