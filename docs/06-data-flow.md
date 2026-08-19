@@ -23,8 +23,7 @@ flowchart LR
   Matching -. "match notification events" .-> Rabbit
 
   Rabbit --> MatchingConsumer["matching-consumer"]
-  MatchingConsumer --> Worker["Celery Worker"]
-  Worker --> MatchingDB
+  MatchingConsumer --> MatchingDB
 
   Rabbit --> NotificationConsumer["Chat Notification Consumer"]
   NotificationConsumer --> ChatDB
@@ -78,7 +77,7 @@ sequenceDiagram
   participant AuthDB as auth_db
   participant MQ as RabbitMQ
   participant MC as matching-consumer
-  participant W as Celery Worker
+  participant W as matching-consumer
   participant MDB as matching_db
 
   FE->>GW: PUT /api/user/me
@@ -88,7 +87,7 @@ sequenceDiagram
   AUTH-->>MQ: publish user.profile.updated
 
   MQ-->>MC: deliver event
-  MC-->>W: process_user_profile_updated
+  MC->>W: process_user_profile_updated
   W->>MDB: update applicant_features
   W->>MDB: invalidate old scores/recommendations
   W->>MDB: precompute recommendations
@@ -204,7 +203,7 @@ sequenceDiagram
   participant DB as scholarship_db
   participant MQ as RabbitMQ
   participant MC as matching-consumer
-  participant W as Celery Worker
+  participant W as matching-consumer
   participant MDB as matching_db
 
   FE->>GW: POST/PUT /api/v1/scholarships
@@ -217,7 +216,7 @@ sequenceDiagram
 
   S-->>MQ: publish scholarship.created/updated
   MQ-->>MC: deliver event
-  MC-->>W: process scholarship event
+  MC->>W: process scholarship event
   W->>MDB: update opportunity_features
   W->>MDB: invalidate old matching cache
   W->>MDB: precompute recommendation_cache
@@ -377,7 +376,7 @@ Ghi nho:
 
 1. FE loi UI/list cham: xem Network truoc, tim N+1 request.
 2. API cham: xem service log + DB EXPLAIN.
-3. Matching khong cap nhat: xem `matching-consumer`, `celery-worker`, RabbitMQ queue.
+3. Matching khong cap nhat: xem `matching-consumer` va RabbitMQ queue.
 4. Notification khong hien realtime: xem Chat service, WebSocket subscribe, RabbitMQ notification event.
 5. Data da write nhung read chua thay trong recommendation: co the do eventual consistency.
 6. Cross-service call loi 503: xem Auth service, Redis cache, requestId trace.

@@ -18,7 +18,7 @@ Thanh phan chinh:
 - `backend-java/auth-service`: Spring Boot auth/user/org.
 - `backend-java/scholarship-service`: Spring Boot scholarships, applications, bookmarks.
 - `backend-java/chat-service`: chat/notification/websocket.
-- `matching-service`: FastAPI + PostgreSQL, tinh matching/recommendation, co consumer/Celery.
+- `matching-service`: FastAPI + PostgreSQL, tinh matching/recommendation, co RabbitMQ consumer.
 - `nginx-gateway`: route request den tung service.
 
 Van de kien truc dang lam he thong kho toi uu: frontend co **nhieu API layer song song**. `AppContext` dung `apiClient` mock (`frontend/src/lib/api-client.ts:5`, `frontend/src/lib/api-client.ts:22`), trong khi nhieu page lai dung real services (`frontend/src/services/scholarship.service.ts`) va React Query (`frontend/src/hooks/useApi.ts`). Dieu nay gay chong state, kho cache dung, va de tao request trung lap.

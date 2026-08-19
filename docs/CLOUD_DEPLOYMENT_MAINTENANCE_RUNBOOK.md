@@ -207,7 +207,6 @@ rabbitmq-password
 redis-host
 auth-service-url
 matching-service-url
-celery-broker-url
 ```
 
 Khong in gia tri secret ra man hinh neu khong can.

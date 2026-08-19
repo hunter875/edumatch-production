@@ -202,7 +202,6 @@ In EduMatch:
 | `chat-service` | container running Spring Boot and WebSocket |
 | `matching-service` | container running FastAPI/Uvicorn |
 | `matching-consumer` | background process consuming RabbitMQ events |
-| `celery-worker` | background worker for matching jobs |
 
 Local Docker Compose runs these together on one machine.
 Cloud Container Apps runs them as separate scalable apps.
@@ -1176,7 +1175,7 @@ flowchart TB
   Chat["Chat Service"]
   Matching["Matching API"]
   Consumer["Matching Consumer"]
-  Worker["Celery Workers"]
+  Worker["RabbitMQ Consumers"]
   Redis["Azure Cache for Redis"]
   Rabbit["RabbitMQ / Azure Service Bus"]
   AuthDB["Managed MySQL: auth"]

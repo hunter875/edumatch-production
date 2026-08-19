@@ -289,7 +289,7 @@ Symptom:
 Check:
 
 ```powershell
-docker compose --profile workers logs --tail=200 matching-service celery-worker matching-consumer
+docker compose --profile workers logs --tail=200 matching-service matching-consumer
 ```
 
 Likely causes:
@@ -397,7 +397,7 @@ Check:
 
 ```powershell
 docker compose --profile workers ps
-docker compose --profile workers logs --tail=200 rabbitmq matching-consumer celery-worker chat-service
+docker compose --profile workers logs --tail=200 rabbitmq matching-consumer chat-service
 ```
 
 RabbitMQ UI:
@@ -493,4 +493,3 @@ Regression test to add:
 
 Lessons:
 ```
-
