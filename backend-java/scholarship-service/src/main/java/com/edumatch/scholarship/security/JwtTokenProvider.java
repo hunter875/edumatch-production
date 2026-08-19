@@ -19,8 +19,10 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.security.Key;
 import java.security.KeyFactory;
+import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Component
 @Slf4j
@@ -38,6 +40,9 @@ public class JwtTokenProvider {
     @Value("${app.jwt.expected-audience:edumatch-api}")
     private String expectedAudience;
 
+    @Value("${app.jwt.require-rsa:false}")
+    private boolean requireRsa;
+
     private Key verificationKey;
 
     @PostConstruct
@@ -54,8 +59,14 @@ public class JwtTokenProvider {
                 log.info("JWT verification initialized with RSA public key");
                 return;
             } catch (Exception e) {
-                log.error("Failed to load RSA public key, falling back to HS256: {}", e.getMessage());
+                if (requireRsa) {
+                    throw new IllegalStateException("RSA JWT public key is required but could not be loaded", e);
+                }
+                log.error("Failed to load RSA public key; falling back to HS256 because app.jwt.require-rsa=false: {}", e.getMessage());
             }
+        }
+        if (requireRsa) {
+            throw new IllegalStateException("RSA JWT public key is required but no key path was configured");
         }
         verificationKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
         log.warn("JWT verification initialized with HS256 shared secret — NOT for production");
@@ -132,10 +143,19 @@ public class JwtTokenProvider {
     }
 
     private Claims parseClaims(String token) {
-        return Jwts.parser()
-                .verifyWith(verificationKey)
+        JwtParserBuilder parserBuilder = Jwts.parser()
                 .clockSkewSeconds(30)
-                .build()
+                .requireIssuer(expectedIssuer);
+
+        if (verificationKey instanceof SecretKey secretKey) {
+            parserBuilder.verifyWith(secretKey);
+        } else if (verificationKey instanceof PublicKey publicKey) {
+            parserBuilder.verifyWith(publicKey);
+        } else {
+            throw new IllegalStateException("Unsupported JWT verification key type");
+        }
+
+        return parserBuilder.build()
                 .parseSignedClaims(token)
                 .getPayload();
     }

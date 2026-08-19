@@ -1,6 +1,6 @@
-# 🧠 Matching Service
+# Matching Service
 
-ML-based matching and recommendation service cho EduMatch platform.
+Rule-based matching and recommendation service cho EduMatch platform.
 
 ## 📋 Tổng quan
 
@@ -17,8 +17,8 @@ Matching Service là microservice lõi chịu trách nhiệm:
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │   FastAPI    │  │    Celery    │  │   RabbitMQ   │     │
-│  │  API Server  │  │   Workers    │  │   Consumer   │     │
+│  │   FastAPI    │  │ Task Handler │  │   RabbitMQ   │     │
+│  │  API Server  │  │   Modules    │  │   Consumer   │     │
 │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │
 │         │                 │                 │              │
 │         └─────────────────┴─────────────────┘              │
@@ -37,14 +37,14 @@ Matching Service là microservice lõi chịu trách nhiệm:
    - `GET /api/v1/recommendations/applicant/{id}` - Gợi ý cho applicant (2-5s)
    - `GET /api/v1/recommendations/opportunity/{id}` - Gợi ý cho opportunity (2-5s)
 
-2. **Celery Workers**: Background feature processing
+2. **Task-compatible handlers**: Background feature processing
    - Xử lý event `user.profile.updated`
    - Xử lý event `scholarship.created`
    - Xử lý event `scholarship.updated`
 
 3. **RabbitMQ Consumer**: Event listener
    - Lắng nghe events từ RabbitMQ
-   - Dispatch tasks đến Celery workers
+   - Gọi matching task handlers trong consumer process hiện tại
 
 4. **PostgreSQL**: Feature storage
    - Lưu applicant_features
@@ -55,7 +55,7 @@ Matching Service là microservice lõi chịu trách nhiệm:
 
 - **Python 3.10+**
 - **FastAPI** - Modern async web framework
-- **Celery** - Distributed task queue
+- **Celery** - Task decorator/config compatibility for future queue-backed workers
 - **RabbitMQ** - Message broker
 - **PostgreSQL** - Relational database
 - **SQLAlchemy** - ORM
@@ -73,10 +73,10 @@ pip install -r requirements.txt
 # Run API server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-# Run Celery worker (terminal 2)
+# Optional: run Celery worker if the deployment is switched to queue-backed tasks
 celery -A app.celery_app worker --loglevel=info
 
-# Run RabbitMQ consumer (terminal 3)
+# Run RabbitMQ consumer (terminal 2 in the current deployment path)
 python -m app.consumer
 ```
 

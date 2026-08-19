@@ -17,6 +17,12 @@ on:
       - "requirements-docs.txt"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
+    inputs:
+      deploy_pages:
+        description: Deploy to GitHub Pages after a successful build
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -46,13 +52,13 @@ jobs:
         run: mkdocs build
 
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
+        if: github.event_name == 'workflow_dispatch' && inputs.deploy_pages
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_pages
     needs: build
     runs-on: ubuntu-latest
     environment:

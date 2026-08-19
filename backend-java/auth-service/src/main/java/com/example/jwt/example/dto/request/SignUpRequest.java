@@ -31,6 +31,6 @@ public class SignUpRequest {
     @Size(max = 10)
     private String sex; // MALE, FEMALE, OTHER
 
-    // REMOVED: organizationId must NOT be settable via public signup.
-    // Organization assignment must go through admin approval or invitation flow.
+    // Optional, admin/invitation-only. Public signup must not trust this value.
+    private Long organizationId;
 }
