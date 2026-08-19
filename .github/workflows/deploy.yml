@@ -219,28 +219,28 @@ jobs:
           if [[ "$AUTH_REQUIRED" == "true" ]]; then
             check_app_secrets auth-service \
               auth-db-url auth-db-username auth-db-password \
-              jwt-secret rabbitmq-host rabbitmq-user rabbitmq-password \
+              jwt-secret jwt-private-key jwt-public-key rabbitmq-host rabbitmq-user rabbitmq-password \
               redis-host mail-username mail-password
           fi
 
           if [[ "$SCHOLARSHIP_REQUIRED" == "true" ]]; then
             check_app_secrets scholarship-service \
               scholarship-db-url scholarship-db-username scholarship-db-password \
-              jwt-secret rabbitmq-host rabbitmq-user rabbitmq-password \
+              jwt-secret jwt-public-key rabbitmq-host rabbitmq-user rabbitmq-password \
               redis-host auth-service-url matching-service-url
           fi
 
           if [[ "$CHAT_REQUIRED" == "true" ]]; then
             check_app_secrets chat-service \
               chat-db-url chat-db-username chat-db-password \
-              jwt-secret rabbitmq-host rabbitmq-user rabbitmq-password \
+              jwt-secret jwt-public-key rabbitmq-host rabbitmq-user rabbitmq-password \
               auth-service-url
           fi
 
           if [[ "$MATCHING_REQUIRED" == "true" ]]; then
             check_app_secrets matching-service \
               matching-db-url rabbitmq-host rabbitmq-user rabbitmq-password \
-              jwt-secret celery-broker-url
+              jwt-secret jwt-public-key celery-broker-url
           fi
 
   # ============================================================
@@ -298,6 +298,9 @@ jobs:
             SPRING_DATASOURCE_USERNAME=secretref:auth-db-username
             SPRING_DATASOURCE_PASSWORD=secretref:auth-db-password
             APP_JWT_SECRET=secretref:jwt-secret
+            APP_JWT_REQUIRE_RSA=true
+            APP_JWT_RSA_PRIVATE_KEY=secretref:jwt-private-key
+            APP_JWT_RSA_PUBLIC_KEY=secretref:jwt-public-key
             RABBITMQ_HOST=secretref:rabbitmq-host
             RABBITMQ_USERNAME=secretref:rabbitmq-user
             RABBITMQ_PASSWORD=secretref:rabbitmq-password
@@ -333,6 +336,9 @@ jobs:
               SPRING_DATASOURCE_USERNAME=secretref:auth-db-username \
               SPRING_DATASOURCE_PASSWORD=secretref:auth-db-password \
               APP_JWT_SECRET=secretref:jwt-secret \
+              APP_JWT_REQUIRE_RSA=true \
+              APP_JWT_RSA_PRIVATE_KEY=secretref:jwt-private-key \
+              APP_JWT_RSA_PUBLIC_KEY=secretref:jwt-public-key \
               RABBITMQ_HOST=secretref:rabbitmq-host \
               RABBITMQ_USERNAME=secretref:rabbitmq-user \
               RABBITMQ_PASSWORD=secretref:rabbitmq-password \
@@ -411,6 +417,8 @@ jobs:
             SPRING_DATASOURCE_USERNAME=secretref:scholarship-db-username
             SPRING_DATASOURCE_PASSWORD=secretref:scholarship-db-password
             JWT_SECRET=secretref:jwt-secret
+            APP_JWT_REQUIRE_RSA=true
+            APP_JWT_RSA_PUBLIC_KEY=secretref:jwt-public-key
             RABBITMQ_HOST=secretref:rabbitmq-host
             RABBITMQ_USERNAME=secretref:rabbitmq-user
             RABBITMQ_PASSWORD=secretref:rabbitmq-password
@@ -446,6 +454,8 @@ jobs:
               SPRING_DATASOURCE_USERNAME=secretref:scholarship-db-username \
               SPRING_DATASOURCE_PASSWORD=secretref:scholarship-db-password \
               JWT_SECRET=secretref:jwt-secret \
+              APP_JWT_REQUIRE_RSA=true \
+              APP_JWT_RSA_PUBLIC_KEY=secretref:jwt-public-key \
               RABBITMQ_HOST=secretref:rabbitmq-host \
               RABBITMQ_USERNAME=secretref:rabbitmq-user \
               RABBITMQ_PASSWORD=secretref:rabbitmq-password \
@@ -524,6 +534,8 @@ jobs:
             SPRING_DATASOURCE_USERNAME=secretref:chat-db-username
             SPRING_DATASOURCE_PASSWORD=secretref:chat-db-password
             JWT_SECRET=secretref:jwt-secret
+            APP_JWT_REQUIRE_RSA=true
+            APP_JWT_RSA_PUBLIC_KEY=secretref:jwt-public-key
             RABBITMQ_HOST=secretref:rabbitmq-host
             RABBITMQ_USERNAME=secretref:rabbitmq-user
             RABBITMQ_PASSWORD=secretref:rabbitmq-password
@@ -555,6 +567,8 @@ jobs:
               SPRING_DATASOURCE_USERNAME=secretref:chat-db-username \
               SPRING_DATASOURCE_PASSWORD=secretref:chat-db-password \
               JWT_SECRET=secretref:jwt-secret \
+              APP_JWT_REQUIRE_RSA=true \
+              APP_JWT_RSA_PUBLIC_KEY=secretref:jwt-public-key \
               RABBITMQ_HOST=secretref:rabbitmq-host \
               RABBITMQ_USERNAME=secretref:rabbitmq-user \
               RABBITMQ_PASSWORD=secretref:rabbitmq-password \
@@ -619,7 +633,9 @@ jobs:
             RABBITMQ_USER=secretref:rabbitmq-user
             RABBITMQ_PASSWORD=secretref:rabbitmq-password
             JWT_SECRET=secretref:jwt-secret
-            JWT_ALGORITHM=HS256
+            JWT_REQUIRE_RSA=true
+            JWT_PUBLIC_KEY=secretref:jwt-public-key
+            JWT_ALGORITHM=RS256
             CELERY_BROKER_URL=secretref:celery-broker-url
             CELERY_RESULT_BACKEND=rpc://
             DEBUG=false
@@ -644,7 +660,9 @@ jobs:
               RABBITMQ_USER=secretref:rabbitmq-user \
               RABBITMQ_PASSWORD=secretref:rabbitmq-password \
               JWT_SECRET=secretref:jwt-secret \
-              JWT_ALGORITHM=HS256 \
+              JWT_REQUIRE_RSA=true \
+              JWT_PUBLIC_KEY=secretref:jwt-public-key \
+              JWT_ALGORITHM=RS256 \
               CELERY_BROKER_URL=secretref:celery-broker-url \
               CELERY_RESULT_BACKEND=rpc:// \
               DEBUG=false \
