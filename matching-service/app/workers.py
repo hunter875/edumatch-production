@@ -1,12 +1,11 @@
 """
-Task-compatible handlers for processing RabbitMQ events
+RabbitMQ event handlers for matching read models and recommendation precompute.
 """
 import logging
 import json
 import pika
 from datetime import datetime
 from sqlalchemy.orm import Session
-from .celery_app import celery_app
 from .database import SessionLocal
 from . import models, schemas
 from .matching import matching_engine
@@ -25,12 +24,11 @@ def get_db():
 
 # ============= Event Processors =============
 
-@celery_app.task(name='app.workers.process_user_profile_updated', bind=True, max_retries=3)
-def process_user_profile_updated(self, event_data: dict):
+def process_user_profile_updated(event_data: dict):
     """
     Process user.profile.updated event
     
-    Worker sẽ:
+    Handler sẽ:
     1. Nhận event data từ RabbitMQ
     2. Tiền xử lý features (vectorization)
     3. Lưu/Update vào PostgreSQL
@@ -118,19 +116,17 @@ def process_user_profile_updated(self, event_data: dict):
         db.rollback()
         logger.error(f"[Worker] ❌ Error processing user.profile.updated: {e}", exc_info=True)
         
-        # Retry with exponential backoff
-        raise self.retry(exc=e, countdown=60 * (2 ** self.request.retries))
+        raise
         
     finally:
         db.close()
 
 
-@celery_app.task(name='app.workers.process_scholarship_created', bind=True, max_retries=3)
-def process_scholarship_created(self, event_data: dict):
+def process_scholarship_created(event_data: dict):
     """
     Process scholarship.created event
     
-    Worker sẽ:
+    Handler sẽ:
     1. Nhận event data từ RabbitMQ
     2. Tiền xử lý features (vectorization)
     3. Lưu vào PostgreSQL
@@ -236,15 +232,13 @@ def process_scholarship_created(self, event_data: dict):
         db.rollback()
         logger.error(f"[Worker] ❌ Error processing scholarship.created: {e}", exc_info=True)
         
-        # Retry with exponential backoff
-        raise self.retry(exc=e, countdown=60 * (2 ** self.request.retries))
+        raise
         
     finally:
         db.close()
 
 
-@celery_app.task(name='app.workers.process_scholarship_updated', bind=True, max_retries=3)
-def process_scholarship_updated(self, event_data: dict):
+def process_scholarship_updated(event_data: dict):
     """
     Process scholarship.updated event
     Similar to created but updates existing record
@@ -360,15 +354,13 @@ def process_scholarship_updated(self, event_data: dict):
         db.rollback()
         logger.error(f"[Worker] ❌ Error processing scholarship.updated: {e}", exc_info=True)
         
-        # Retry with exponential backoff
-        raise self.retry(exc=e, countdown=60 * (2 ** self.request.retries))
+        raise
         
     finally:
         db.close()
 
 
-@celery_app.task(name='app.workers.process_scholarship_deleted', bind=True, max_retries=3)
-def process_scholarship_deleted(self, event_data: dict):
+def process_scholarship_deleted(event_data: dict):
     """Remove opportunity features and matching read models after scholarship deletion."""
     opportunity_id = str(
         event_data.get("opportunityId")
@@ -400,7 +392,7 @@ def process_scholarship_deleted(self, event_data: dict):
     except Exception as e:
         db.rollback()
         logger.error("[Worker] Error processing scholarship.deleted: %s", e, exc_info=True)
-        raise self.retry(exc=e, countdown=60 * (2 ** self.request.retries))
+        raise
     finally:
         db.close()
 

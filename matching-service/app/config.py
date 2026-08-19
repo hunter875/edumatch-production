@@ -43,10 +43,6 @@ class Settings(BaseSettings):
     JWT_EXPECTED_ISSUER: Optional[str] = "edumatch-auth"  # validate iss claim
     JWT_EXPECTED_AUDIENCE: str = "edumatch-api"
     
-    # Celery
-    CELERY_BROKER_URL: str
-    CELERY_RESULT_BACKEND: str = "rpc://"
-    
     # ML Settings
     ML_MODEL_PATH: Optional[str] = "/app/models"
     TFIDF_MAX_FEATURES: int = 1000
