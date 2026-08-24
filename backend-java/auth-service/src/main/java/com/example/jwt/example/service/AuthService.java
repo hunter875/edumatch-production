@@ -22,7 +22,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collections;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -175,24 +174,7 @@ public class AuthService {
 
     private void publishUserProfileUpdatedEvent(User user) {
         try {
-            java.util.List<String> skillsList = user.getSkills() != null && !user.getSkills().isEmpty()
-                    ? java.util.Arrays.asList(user.getSkills().split(","))
-                    : java.util.List.of();
-
-            java.util.List<String> researchInterestsList = user.getResearchInterests() != null && !user.getResearchInterests().isEmpty()
-                    ? java.util.Arrays.asList(user.getResearchInterests().split(","))
-                    : java.util.List.of();
-
-            Map<String, Object> eventPayload = Map.of(
-                    "userId", user.getId().toString(),
-                    "email", user.getEmail(),
-                    "gpa", user.getGpa() != null ? user.getGpa() : 0.0,
-                    "major", user.getMajor() != null ? user.getMajor() : "",
-                    "university", user.getUniversity() != null ? user.getUniversity() : "",
-                    "yearOfStudy", user.getYearOfStudy() != null ? user.getYearOfStudy() : 1,
-                    "skills", skillsList,
-                    "researchInterests", researchInterestsList
-            );
+            java.util.Map<String, Object> eventPayload = UserProfileEventPayloadFactory.fromUser(user);
 
             rabbitTemplate.convertAndSend(
                     "events_exchange",

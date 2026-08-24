@@ -77,6 +77,24 @@ public class User implements UserDetails {
     @Column(name = "year_of_study")
     private Integer yearOfStudy;
 
+    @Column(name = "level", length = 100)
+    private String level;
+
+    @Column(name = "study_mode", length = 100)
+    private String studyMode;
+
+    @Column(name = "location", length = 255)
+    private String location;
+
+    @Column(name = "nationality", length = 100)
+    private String nationality;
+
+    @Column(name = "preferred_locations", columnDefinition = "TEXT")
+    private String preferredLocations;
+
+    @Column(name = "preferred_funding_types", columnDefinition = "TEXT")
+    private String preferredFundingTypes;
+
     @Column(name = "skills", columnDefinition = "TEXT")
     private String skills; // Stored as comma-separated values
 

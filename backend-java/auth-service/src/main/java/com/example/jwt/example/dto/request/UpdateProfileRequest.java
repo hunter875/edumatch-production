@@ -37,6 +37,24 @@ public class UpdateProfileRequest {
 
     private Integer yearOfStudy;
 
+    @Size(max = 100)
+    private String level;
+
+    @Size(max = 100)
+    private String studyMode;
+
+    @Size(max = 255)
+    private String location;
+
+    @Size(max = 100)
+    private String nationality;
+
+    @Size(max = 1000)
+    private String preferredLocations;
+
+    @Size(max = 1000)
+    private String preferredFundingTypes;
+
     @Size(max = 1000)
     private String skills; // Comma-separated: "Python,Java,Machine Learning"
 
@@ -44,4 +62,3 @@ public class UpdateProfileRequest {
     private String researchInterests; // Comma-separated: "AI,NLP,Computer Vision"
     // ============================================
 }
-
