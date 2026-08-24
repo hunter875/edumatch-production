@@ -171,7 +171,7 @@ def process_scholarship_created(event_data: dict):
             study_mode=event.studyMode,
             location=event.location,
             funding_type=event.fundingType,
-            provider_id=event.providerId,
+            provider_id=event.get_provider_id(),
             source_url=event.sourceUrl,
             last_verified_at=event.lastVerifiedAt,
             is_public=event.isPublic,
@@ -306,7 +306,7 @@ def process_scholarship_updated(event_data: dict):
             opportunity_feature.study_mode = event.studyMode
             opportunity_feature.location = event.location
             opportunity_feature.funding_type = event.fundingType
-            opportunity_feature.provider_id = event.providerId
+            opportunity_feature.provider_id = event.get_provider_id()
             opportunity_feature.source_url = event.sourceUrl
             opportunity_feature.last_verified_at = event.lastVerifiedAt
             opportunity_feature.is_public = event.isPublic
@@ -337,7 +337,7 @@ def process_scholarship_updated(event_data: dict):
                 study_mode=event.studyMode,
                 location=event.location,
                 funding_type=event.fundingType,
-                provider_id=event.providerId,
+                provider_id=event.get_provider_id(),
                 source_url=event.sourceUrl,
                 last_verified_at=event.lastVerifiedAt,
                 is_public=event.isPublic,

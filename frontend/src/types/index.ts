@@ -144,9 +144,9 @@ export interface Scholarship {
   department: string;
   duration: number;
   isRemote: boolean; // ✅ Đã thay thế 'studyMode'
-  minGpa: number;
+  minGpa: number | null;
   requirements: {
-    minGpa?: number;
+    minGpa?: number | null;
     englishProficiency?: string;
     documents?: string[];
   };
@@ -159,6 +159,11 @@ export interface Scholarship {
   // Các trường tùy chọn/cũ (vẫn giữ để linh hoạt)
   tags?: string[];
   website?: string;
+  sourceUrl?: string | null;
+  fundingType?: string | null;
+  eligibleMajors?: string[];
+  eligibleNationalities?: string[];
+  opportunityVersion?: string | null;
   contactEmail?: string;
   isPublic?: boolean;
   matchScore?: number;
