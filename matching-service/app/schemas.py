@@ -44,20 +44,26 @@ class ScoreResponse(BaseModel):
     """Response for POST /api/v1/match/score"""
     overallScore: float = Field(..., ge=0, le=100)
     breakdown: ScoreBreakdown
+    scoreType: str = "RULE_COMPATIBILITY"
     hardFiltersPassed: bool = True
     constraintViolations: List[str] = Field(default_factory=list)
     explanations: List[str] = Field(default_factory=list)
     algorithmVersion: Optional[str] = None
+    modelVersion: Optional[str] = None
+    corpusVersion: Optional[str] = None
 
 class BatchScoreDetail(BaseModel):
     """Detailed batch score item for debugging/evaluation UIs"""
     opportunityId: str
     overallScore: float = Field(..., ge=0, le=100)
     breakdown: ScoreBreakdown
+    scoreType: str = "RULE_COMPATIBILITY"
     hardFiltersPassed: bool = True
     constraintViolations: List[str] = Field(default_factory=list)
     explanations: List[str] = Field(default_factory=list)
     algorithmVersion: Optional[str] = None
+    modelVersion: Optional[str] = None
+    corpusVersion: Optional[str] = None
 
 class RecommendationItem(BaseModel):
     """Single recommendation item"""
@@ -71,7 +77,9 @@ class RecommendationItem(BaseModel):
     missingInformation: List[str] = Field(default_factory=list)
     sourceUrl: Optional[str] = None
     lastVerifiedAt: Optional[datetime] = None
+    scoreType: Optional[str] = None
     modelVersion: Optional[str] = None
+    corpusVersion: Optional[str] = None
     generatedAt: Optional[datetime] = None
     profileVersion: Optional[str] = None
     opportunityVersion: Optional[str] = None

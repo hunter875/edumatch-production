@@ -97,6 +97,12 @@ TF-IDF rules:
 - do not fit applicant and opportunity text separately
 - fall back to rule-only ranking when the vectorizer is not ready
 
+Scoring contract:
+
+- `/api/v1/match/score` returns `scoreType=RULE_COMPATIBILITY`; it is a pairwise compatibility score and does not fit TF-IDF.
+- recommendation endpoints normally return `scoreType=HYBRID_RANKING`; these rows come from the hard-filtered TF-IDF corpus plus structured components.
+- `corpusVersion` is present for hybrid ranking rows and is derived from the opportunity corpus IDs and opportunity versions used by the vectorizer.
+
 Recommendation output includes:
 
 ```txt
@@ -108,12 +114,14 @@ reasons
 missingInformation
 sourceUrl
 lastVerifiedAt
+scoreType
 modelVersion
+corpusVersion
 profileVersion
 opportunityVersion
 ```
 
-Recommendation cache rows store rank, eligibility status, component JSON, reasons JSON, missing-information JSON, model version, profile version, opportunity version, generated time, and expiry. Delivery reliability is documented as at-least-once, not exactly-once.
+Recommendation cache rows store rank, eligibility status, component JSON, reasons JSON, missing-information JSON, score type, model version, corpus version, profile version, opportunity version, generated time, and expiry. Delivery reliability is documented as at-least-once, not exactly-once.
 
 Event consumption uses a status-aware `processed_events` ledger:
 

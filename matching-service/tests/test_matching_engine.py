@@ -1,4 +1,9 @@
-from app.matching import HYBRID_V2_WEIGHTS, MatchingEngine
+from app.matching import (
+    HYBRID_RANKING_SCORE_TYPE,
+    HYBRID_V2_WEIGHTS,
+    RULE_COMPATIBILITY_SCORE_TYPE,
+    MatchingEngine,
+)
 
 
 def test_hybrid_v2_weights_sum_to_one():
@@ -167,7 +172,11 @@ def test_hybrid_recommendations_fit_tfidf_on_opportunity_corpus_once():
 
     assert [item["candidate_id"] for item in results] == ["ai", "security"]
     assert results[0]["components"]["textSimilarity"] > results[1]["components"]["textSimilarity"]
+    assert results[0]["score_type"] == HYBRID_RANKING_SCORE_TYPE
     assert results[0]["model_version"] == "hybrid-v2.0"
+    assert results[0]["corpus_version"].startswith("opportunity-corpus:hybrid-v2.0:")
+    assert results[0]["breakdown"]["_scoreType"] == HYBRID_RANKING_SCORE_TYPE
+    assert results[0]["breakdown"]["_corpusVersion"] == results[0]["corpus_version"]
 
 
 def test_hybrid_recommendations_are_deterministic_for_same_input():
@@ -205,6 +214,42 @@ def test_hybrid_recommendations_are_deterministic_for_same_input():
     second = engine.calculate_hybrid_recommendations(applicant, opportunities)
 
     assert first == second
+
+
+def test_rule_score_contract_is_not_hybrid_ranking():
+    engine = MatchingEngine()
+
+    score, breakdown = engine.calculate_rule_based_score(
+        {
+            "gpa": 3.8,
+            "major": "Computer Science",
+            "skills": ["Python"],
+        },
+        {
+            "min_gpa": 3.0,
+            "preferred_majors": ["Computer Science"],
+            "required_skills": ["Python"],
+            "moderation_status": "APPROVED",
+        },
+    )
+
+    assert score > 0
+    assert breakdown["_scoreType"] == RULE_COMPATIBILITY_SCORE_TYPE
+    assert breakdown["_corpusVersion"] is None
+
+
+def test_corpus_version_changes_when_opportunity_version_changes():
+    engine = MatchingEngine()
+    opportunities = [
+        {"id": "one", "opportunity_version": "v1"},
+        {"id": "two", "opportunity_version": "v1"},
+    ]
+
+    first = engine._corpus_version(opportunities)
+    opportunities[1]["opportunity_version"] = "v2"
+    second = engine._corpus_version(opportunities)
+
+    assert first != second
 
 
 def test_hybrid_recommendations_cap_provider_concentration_in_top_ten():

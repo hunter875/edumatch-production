@@ -101,9 +101,9 @@ Current matching flow:
 1. Store applicant and opportunity features in PostgreSQL.
 2. Apply hard eligibility filters before retrieval/ranking; ineligible candidates are excluded and missing required applicant data is reported as `UNKNOWN`.
 3. Fit TF-IDF once on the eligible/unknown opportunity corpus, transform the applicant with the same vectorizer, then calculate structured weighted score components.
-4. Support batch scoring for scholarship cards.
+4. Support `/match/score` and batch scoring as `RULE_COMPATIBILITY` pair scores for scholarship cards and diagnostics; these are not semantic recommendation rankings.
 5. Store applicant-opportunity scores in `matching_scores`.
-6. Store top-N recommendations in `recommendation_cache`.
+6. Store top-N `HYBRID_RANKING` recommendations in `recommendation_cache` with `modelVersion` and `corpusVersion`.
 7. Use RabbitMQ consumer/event processing with status-aware event claims, bounded retry queues, and DLQ routing to refresh matching features and cached recommendations.
 
 The project does not call an LLM in the hot path. If AI is added later, the intended use is offline profile parsing, skill normalization, embeddings, and cached explanations.

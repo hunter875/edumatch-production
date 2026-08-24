@@ -420,7 +420,7 @@ Base path:
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | GET | `/health` | public/internal | health |
-| POST | `/api/v1/match/score` | user | single score |
+| POST | `/api/v1/match/score` | user | single `RULE_COMPATIBILITY` pair score |
 | POST | `/api/v1/matching/batch-scores` | user | batch card scores |
 | GET | `/api/v1/recommendations/applicant/{applicantId}` | user/admin | applicant recommendations |
 | GET | `/api/v1/recommendations/opportunity/{opportunityId}` | employer/admin | candidate recommendations |
@@ -444,6 +444,19 @@ Response:
 }
 ```
 
+Single score response:
+
+```json
+{
+  "overallScore": 87.5,
+  "scoreType": "RULE_COMPATIBILITY",
+  "modelVersion": "hybrid-v2.0",
+  "corpusVersion": null
+}
+```
+
+`/api/v1/match/score` is a pairwise compatibility/card score. It does not fit TF-IDF and must not be interpreted as the same score as the recommendation ranking feed.
+
 Recommendation response:
 
 ```json
@@ -456,7 +469,10 @@ Recommendation response:
   "data": [
     {
       "opportunityId": "1",
-      "matchingScore": 92.1
+      "matchingScore": 92.1,
+      "scoreType": "HYBRID_RANKING",
+      "modelVersion": "hybrid-v2.0",
+      "corpusVersion": "opportunity-corpus:hybrid-v2.0:..."
     }
   ]
 }
@@ -521,4 +537,3 @@ For each important endpoint:
 - [ ] request duration logged
 - [ ] pagination works at page 0/1/out-of-range
 - [ ] frontend service maps response correctly
-
