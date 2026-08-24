@@ -69,7 +69,7 @@ public class AuthService {
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
         String jwt = tokenProvider.generateToken(authentication);
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
+        RefreshTokenService.IssuedRefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getId());
 
         auditLogService.logAction(
                 user.getId(),
@@ -80,7 +80,7 @@ public class AuthService {
         );
 
         log.info("User {} authenticated successfully", user.getUsername());
-        return new AuthResult(jwt, refreshToken.getToken());
+        return new AuthResult(jwt, refreshToken.rawToken());
     }
 
     public User registerUser(SignUpRequest signUpRequest) {
@@ -117,6 +117,7 @@ public class AuthService {
      * Refresh access token using a raw refresh token string.
      * Rotates the refresh token atomically.
      */
+    @Transactional(noRollbackFor = BadRequestException.class)
     public AuthResult refreshAccessToken(String rawRefreshToken) {
         log.info("Refreshing access token");
 
@@ -124,12 +125,15 @@ public class AuthService {
                 .map(refreshTokenService::verifyExpiration)
                 .map(refreshToken -> {
                     User user = refreshToken.getUser();
+                    ensureRefreshAllowed(user);
+
                     String newToken = tokenProvider.generateTokenFromUser(user);
 
-                    RefreshToken newRefreshToken = refreshTokenService.rotateRefreshToken(refreshToken, rawRefreshToken);
+                    RefreshTokenService.IssuedRefreshToken newRefreshToken =
+                            refreshTokenService.rotateRefreshToken(refreshToken, rawRefreshToken);
 
                     log.info("Access token refreshed and refresh token rotated for user: {}", user.getUsername());
-                    return new AuthResult(newToken, newRefreshToken.getToken());
+                    return new AuthResult(newToken, newRefreshToken.rawToken());
                 })
                 .orElseThrow(() -> {
                     if (refreshTokenService.revokeActiveTokenIfReuseDetected(rawRefreshToken)) {
@@ -138,6 +142,14 @@ public class AuthService {
                     log.error("Refresh token validation failed");
                     return new ResourceNotFoundException("RefreshToken", "token", "[REDACTED]");
                 });
+    }
+
+    private void ensureRefreshAllowed(User user) {
+        boolean activeStatus = user.getStatus() == null || "ACTIVE".equalsIgnoreCase(user.getStatus());
+        if (!Boolean.TRUE.equals(user.getEnabled()) || !activeStatus) {
+            refreshTokenService.deleteByUserId(user.getId());
+            throw new BadRequestException("Refresh token is invalid or expired");
+        }
     }
 
     private void validateUsernameNotExists(String username) {

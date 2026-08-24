@@ -7,11 +7,11 @@ import com.example.jwt.example.dto.request.LoginRequest;
 import com.example.jwt.example.dto.request.SignUpRequest;
 import com.example.jwt.example.exception.BadRequestException;
 import com.example.jwt.example.exception.ResourceNotFoundException;
-import com.example.jwt.example.model.RefreshToken;
 import com.example.jwt.example.model.User;
 import com.example.jwt.example.service.AuthService;
 import com.example.jwt.example.service.RefreshTokenService;
 import com.example.jwt.example.security.JwtTokenProvider;
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -19,6 +19,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -43,11 +44,23 @@ public class AuthController {
     @Value("${app.auth.cookie.domain:}")
     private String cookieDomain;
 
+    @Value("${DEPLOY_ENVIRONMENT:local}")
+    private String deployEnvironment;
+
     private static final String REFRESH_COOKIE_NAME = "refresh_token";
     private static final String SESSION_MARKER_COOKIE = "auth_session";
     private static final int REFRESH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7 days
 
     // ---- Cookie helpers ----
+
+    @PostConstruct
+    void validateCookieSecurity() {
+        String environment = deployEnvironment == null ? "local" : deployEnvironment.trim().toLowerCase(Locale.ROOT);
+        if (("staging".equals(environment) || "production".equals(environment) || "prod".equals(environment))
+                && !cookieSecure) {
+            throw new IllegalStateException("app.auth.cookie.secure must be true in staging/production");
+        }
+    }
 
     private void setRefreshCookie(HttpServletResponse response, String refreshToken) {
         Cookie cookie = new Cookie(REFRESH_COOKIE_NAME, refreshToken);
@@ -76,18 +89,21 @@ public class AuthController {
     }
 
     private void clearAuthCookies(HttpServletResponse response) {
-        for (String name : new String[]{REFRESH_COOKIE_NAME, SESSION_MARKER_COOKIE}) {
-            Cookie cookie = new Cookie(name, "");
-            cookie.setHttpOnly(true);
-            cookie.setSecure(cookieSecure);
-            cookie.setPath("/");
-            cookie.setMaxAge(0);
-            cookie.setAttribute("SameSite", "Lax");
-            if (cookieDomain != null && !cookieDomain.isBlank()) {
-                cookie.setDomain(cookieDomain);
-            }
-            response.addCookie(cookie);
+        expireCookie(response, REFRESH_COOKIE_NAME, "/api/auth");
+        expireCookie(response, SESSION_MARKER_COOKIE, "/");
+    }
+
+    private void expireCookie(HttpServletResponse response, String name, String path) {
+        Cookie cookie = new Cookie(name, "");
+        cookie.setHttpOnly(true);
+        cookie.setSecure(cookieSecure);
+        cookie.setPath(path);
+        cookie.setMaxAge(0);
+        cookie.setAttribute("SameSite", "Lax");
+        if (cookieDomain != null && !cookieDomain.isBlank()) {
+            cookie.setDomain(cookieDomain);
         }
+        response.addCookie(cookie);
     }
 
     private String getRefreshTokenFromCookie(HttpServletRequest request) {
@@ -113,19 +129,25 @@ public class AuthController {
             AuthService.AuthResult result = authService.authenticateUser(loginRequest);
             setRefreshCookie(response, result.refreshToken());
             setSessionMarker(response);
-            return ResponseEntity.ok(new JwtAuthenticationResponse(result.accessToken()));
+            return ResponseEntity.ok()
+                    .cacheControl(CacheControl.noStore())
+                    .body(new JwtAuthenticationResponse(result.accessToken()));
         } catch (org.springframework.security.authentication.BadCredentialsException e) {
             return ResponseEntity.status(401)
+                    .cacheControl(CacheControl.noStore())
                     .body(new ApiResponse(false, "Invalid username or password"));
         } catch (org.springframework.security.authentication.DisabledException e) {
             return ResponseEntity.status(401)
+                    .cacheControl(CacheControl.noStore())
                     .body(new ApiResponse(false, "User account is disabled"));
         } catch (org.springframework.security.authentication.LockedException e) {
             return ResponseEntity.status(401)
+                    .cacheControl(CacheControl.noStore())
                     .body(new ApiResponse(false, "User account is locked"));
         } catch (Exception e) {
             log.error("Unexpected auth error", e);
             return ResponseEntity.status(500)
+                    .cacheControl(CacheControl.noStore())
                     .body(new ApiResponse(false, "An unexpected error occurred"));
         }
     }
@@ -148,13 +170,17 @@ public class AuthController {
                     .fromCurrentContextPath().path("/api/users/{username}")
                     .buildAndExpand(user.getUsername()).toUri();
 
-            return ResponseEntity.created(location).body(new JwtAuthenticationResponse(result.accessToken()));
+            return ResponseEntity.created(location)
+                    .cacheControl(CacheControl.noStore())
+                    .body(new JwtAuthenticationResponse(result.accessToken()));
         } catch (BadRequestException e) {
             return ResponseEntity.badRequest()
+                    .cacheControl(CacheControl.noStore())
                     .body(new ApiResponse(false, e.getMessage()));
         } catch (Exception e) {
             log.error("Unexpected registration error", e);
             return ResponseEntity.status(500)
+                    .cacheControl(CacheControl.noStore())
                     .body(new ApiResponse(false, "An unexpected error occurred"));
         }
     }
@@ -165,6 +191,7 @@ public class AuthController {
         String refreshToken = getRefreshTokenFromCookie(request);
         if (refreshToken == null || refreshToken.isBlank()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .cacheControl(CacheControl.noStore())
                     .body(new ApiResponse(false, "Refresh token is missing"));
         }
 
@@ -172,10 +199,13 @@ public class AuthController {
             AuthService.AuthResult result = authService.refreshAccessToken(refreshToken);
             setRefreshCookie(response, result.refreshToken());
             setSessionMarker(response);
-            return ResponseEntity.ok(new JwtAuthenticationResponse(result.accessToken()));
-        } catch (ResourceNotFoundException e) {
+            return ResponseEntity.ok()
+                    .cacheControl(CacheControl.noStore())
+                    .body(new JwtAuthenticationResponse(result.accessToken()));
+        } catch (ResourceNotFoundException | BadRequestException e) {
             clearAuthCookies(response);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .cacheControl(CacheControl.noStore())
                     .body(new ApiResponse(false, "Refresh token is invalid or expired"));
         }
     }
@@ -192,7 +222,9 @@ public class AuthController {
             }
         }
         clearAuthCookies(response);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.noContent()
+                .cacheControl(CacheControl.noStore())
+                .build();
     }
 
     @PostMapping("/login")

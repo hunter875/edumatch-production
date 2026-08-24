@@ -157,9 +157,14 @@ public class UserService {
      */
     public User toggleUserStatus(Long id) {
         User user = getUserById(id);
-        user.setEnabled(!user.getEnabled());
+        boolean enabled = !Boolean.TRUE.equals(user.getEnabled());
+        user.setEnabled(enabled);
         User updatedUser = userRepository.save(user);
         userCacheEvictionService.evictUser(updatedUser);
+
+        if (!enabled) {
+            refreshTokenService.deleteByUserId(id);
+        }
 
         String action = updatedUser.getEnabled() ? "UNLOCK_USER" : "LOCK_USER";
         String message = updatedUser.getEnabled() ? "User account unlocked" : "User account locked";

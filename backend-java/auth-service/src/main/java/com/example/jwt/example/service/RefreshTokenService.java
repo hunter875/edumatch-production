@@ -34,41 +34,42 @@ public class RefreshTokenService {
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
     private static final int RAW_TOKEN_BYTES = 32; // 256 bits
 
+    public record IssuedRefreshToken(String rawToken, Instant expiryDate) {}
+
     /**
      * Create or update refresh token for a user.
      * The raw token is returned ONCE; only its SHA-256 hash is persisted.
      */
     @Transactional
-    public RefreshToken createRefreshToken(Long userId) {
+    public IssuedRefreshToken createRefreshToken(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         String rawToken = generateRawToken();
         String tokenHash = sha256(rawToken);
+        Instant expiryDate = Instant.now().plusMillis(refreshTokenDurationMs);
 
         RefreshToken refreshToken = refreshTokenRepository.findByUser(user)
                 .orElse(RefreshToken.builder().user(user).build());
 
-        refreshToken.setToken(tokenHash);
-        refreshToken.setExpiryDate(Instant.now().plusMillis(refreshTokenDurationMs));
+        refreshToken.setTokenHash(tokenHash);
+        refreshToken.setExpiryDate(expiryDate);
 
-        RefreshToken saved = refreshTokenRepository.save(refreshToken);
-        // Store the raw token in a transient field so the caller can retrieve it
-        // (the entity's token field holds the hash)
-        saved.setToken(rawToken); // caller reads this, then it's discarded
-
-        return saved;
+        refreshTokenRepository.save(refreshToken);
+        return new IssuedRefreshToken(rawToken, expiryDate);
     }
 
     /**
      * Find a refresh token by its RAW value.
      * Computes the hash and looks it up.
      */
+    @Transactional
     public Optional<RefreshToken> findByToken(String rawToken) {
         String hash = sha256(rawToken);
-        return refreshTokenRepository.findByToken(hash);
+        return refreshTokenRepository.findByTokenHash(hash);
     }
 
+    @Transactional
     public boolean revokeActiveTokenIfReuseDetected(String rawToken) {
         String hash = sha256(rawToken);
         return revokedRefreshTokenRepository.findByTokenHash(hash)
@@ -97,14 +98,15 @@ public class RefreshTokenService {
     @Transactional
     public int revokeByToken(String rawToken) {
         String hash = sha256(rawToken);
-        return refreshTokenRepository.deleteByToken(hash);
+        return refreshTokenRepository.deleteByTokenHash(hash);
     }
 
     @Transactional
-    public RefreshToken rotateRefreshToken(RefreshToken currentToken, String rawCurrentToken) {
+    public IssuedRefreshToken rotateRefreshToken(RefreshToken currentToken, String rawCurrentToken) {
         String oldHash = sha256(rawCurrentToken);
         String rawNewToken = generateRawToken();
         String newHash = sha256(rawNewToken);
+        Instant newExpiryDate = Instant.now().plusMillis(refreshTokenDurationMs);
 
         revokedRefreshTokenRepository.save(RevokedRefreshToken.builder()
                 .tokenHash(oldHash)
@@ -114,11 +116,10 @@ public class RefreshTokenService {
                 .expiresAt(currentToken.getExpiryDate())
                 .build());
 
-        currentToken.setToken(newHash);
-        currentToken.setExpiryDate(Instant.now().plusMillis(refreshTokenDurationMs));
-        RefreshToken saved = refreshTokenRepository.save(currentToken);
-        saved.setToken(rawNewToken);
-        return saved;
+        currentToken.setTokenHash(newHash);
+        currentToken.setExpiryDate(newExpiryDate);
+        refreshTokenRepository.save(currentToken);
+        return new IssuedRefreshToken(rawNewToken, newExpiryDate);
     }
 
     /**

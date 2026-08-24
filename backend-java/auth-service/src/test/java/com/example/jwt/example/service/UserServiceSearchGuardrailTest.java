@@ -13,9 +13,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.util.Optional;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -73,5 +76,41 @@ class UserServiceSearchGuardrailTest {
         verify(userRepository).searchUsers(eq(null), eq(null), eq(null), pageableCaptor.capture());
 
         assertThat(pageableCaptor.getValue().getPageSize()).isEqualTo(10);
+    }
+
+    @Test
+    void toggleUserStatusRevokesRefreshTokenWhenDisablingUser() {
+        User user = User.builder()
+                .id(5L)
+                .username("student")
+                .email("student@example.com")
+                .enabled(true)
+                .build();
+
+        when(userRepository.findById(5L)).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        User updated = userService.toggleUserStatus(5L);
+
+        assertThat(updated.getEnabled()).isFalse();
+        verify(refreshTokenService).deleteByUserId(5L);
+    }
+
+    @Test
+    void toggleUserStatusDoesNotRevokeRefreshTokenWhenEnablingUser() {
+        User user = User.builder()
+                .id(6L)
+                .username("student2")
+                .email("student2@example.com")
+                .enabled(false)
+                .build();
+
+        when(userRepository.findById(6L)).thenReturn(Optional.of(user));
+        when(userRepository.save(user)).thenReturn(user);
+
+        User updated = userService.toggleUserStatus(6L);
+
+        assertThat(updated.getEnabled()).isTrue();
+        verify(refreshTokenService, never()).deleteByUserId(6L);
     }
 }

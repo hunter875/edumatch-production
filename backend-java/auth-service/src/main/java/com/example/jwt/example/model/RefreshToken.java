@@ -20,8 +20,8 @@ public class RefreshToken {
     @JoinColumn(name = "user_id", referencedColumnName = "id")
     private User user;
 
-    @Column(nullable = false, unique = true)
-    private String token;
+    @Column(name = "token", nullable = false, unique = true)
+    private String tokenHash;
 
     @Column(nullable = false)
     private Instant expiryDate;

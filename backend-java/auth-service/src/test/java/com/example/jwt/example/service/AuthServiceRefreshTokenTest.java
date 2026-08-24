@@ -20,6 +20,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -68,19 +69,17 @@ class AuthServiceRefreshTokenTest {
                 .id(7L)
                 .username("student")
                 .email("student@example.com")
+                .enabled(true)
+                .status("ACTIVE")
                 .build();
         RefreshToken current = RefreshToken.builder()
                 .id(11L)
                 .user(user)
-                .token("hashed-old")
+                .tokenHash("hashed-old")
                 .expiryDate(Instant.now().plusSeconds(3600))
                 .build();
-        RefreshToken rotated = RefreshToken.builder()
-                .id(11L)
-                .user(user)
-                .token("raw-new")
-                .expiryDate(Instant.now().plusSeconds(7200))
-                .build();
+        RefreshTokenService.IssuedRefreshToken rotated =
+                new RefreshTokenService.IssuedRefreshToken("raw-new", Instant.now().plusSeconds(7200));
 
         when(refreshTokenService.findByToken("raw-old")).thenReturn(Optional.of(current));
         when(refreshTokenService.verifyExpiration(current)).thenReturn(current);
@@ -92,6 +91,60 @@ class AuthServiceRefreshTokenTest {
         assertThat(result.accessToken()).isEqualTo("new-access");
         assertThat(result.refreshToken()).isEqualTo("raw-new");
         verify(refreshTokenService).rotateRefreshToken(current, "raw-old");
+    }
+
+    @Test
+    void disabledUserCannotRefreshAndActiveTokenIsRevoked() {
+        User user = User.builder()
+                .id(7L)
+                .username("student")
+                .email("student@example.com")
+                .enabled(false)
+                .status("ACTIVE")
+                .build();
+        RefreshToken current = RefreshToken.builder()
+                .id(11L)
+                .user(user)
+                .tokenHash("hashed-old")
+                .expiryDate(Instant.now().plusSeconds(3600))
+                .build();
+
+        when(refreshTokenService.findByToken("raw-old")).thenReturn(Optional.of(current));
+        when(refreshTokenService.verifyExpiration(current)).thenReturn(current);
+
+        assertThatThrownBy(() -> authService.refreshAccessToken("raw-old"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("invalid or expired");
+
+        verify(refreshTokenService).deleteByUserId(7L);
+        verify(tokenProvider, never()).generateTokenFromUser(user);
+    }
+
+    @Test
+    void suspendedUserCannotRefreshAndActiveTokenIsRevoked() {
+        User user = User.builder()
+                .id(8L)
+                .username("student2")
+                .email("student2@example.com")
+                .enabled(true)
+                .status("SUSPENDED")
+                .build();
+        RefreshToken current = RefreshToken.builder()
+                .id(12L)
+                .user(user)
+                .tokenHash("hashed-old")
+                .expiryDate(Instant.now().plusSeconds(3600))
+                .build();
+
+        when(refreshTokenService.findByToken("raw-old")).thenReturn(Optional.of(current));
+        when(refreshTokenService.verifyExpiration(current)).thenReturn(current);
+
+        assertThatThrownBy(() -> authService.refreshAccessToken("raw-old"))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("invalid or expired");
+
+        verify(refreshTokenService).deleteByUserId(8L);
+        verify(tokenProvider, never()).generateTokenFromUser(user);
     }
 
     @Test
