@@ -265,7 +265,9 @@ def ensure_schema_compatibility():
         "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS missing_information_json JSON",
         "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS source_url TEXT",
         "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS last_verified_at TIMESTAMP",
+        "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS score_type VARCHAR(50)",
         "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS model_version VARCHAR(100)",
+        "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS corpus_version VARCHAR(150)",
         "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS profile_version VARCHAR(100)",
         "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS opportunity_version VARCHAR(100)",
         "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS generated_at TIMESTAMP",
@@ -280,6 +282,7 @@ def ensure_schema_compatibility():
         "CREATE INDEX IF NOT EXISTS ix_recommendation_target_score_desc ON recommendation_cache (target_type, target_id, matching_score DESC)",
         "CREATE INDEX IF NOT EXISTS ix_recommendation_target_rank ON recommendation_cache (target_type, target_id, rank)",
         "CREATE INDEX IF NOT EXISTS ix_recommendation_model_version ON recommendation_cache (model_version)",
+        "CREATE INDEX IF NOT EXISTS ix_recommendation_corpus_version ON recommendation_cache (corpus_version)",
         "CREATE INDEX IF NOT EXISTS ix_recommendation_expires ON recommendation_cache (expires_at)",
         "CREATE INDEX IF NOT EXISTS ix_processed_events_lease_until ON processed_events (lease_until)",
     ]

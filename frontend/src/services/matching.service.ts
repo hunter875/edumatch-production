@@ -23,6 +23,9 @@ export interface MatchingScore {
   opportunityId: string;
   applicantId: string | null;
   matchingScore: number; // 0-100
+  scoreType?: 'RULE_COMPATIBILITY' | 'HYBRID_RANKING';
+  modelVersion?: string | null;
+  corpusVersion?: string | null;
 }
 
 export interface RecommendationMetadata {
@@ -55,7 +58,13 @@ export const getRecommendationsForApplicant = async (
 export const getMatchingScore = async (
   applicantId: string,
   opportunityId: string
-): Promise<{ overallScore: number; breakdown: any }> => {
+): Promise<{
+  overallScore: number;
+  breakdown: any;
+  scoreType: 'RULE_COMPATIBILITY';
+  modelVersion?: string | null;
+  corpusVersion?: string | null;
+}> => {
   return apiCall(
     `/api/v1/match/score`,
     {
@@ -99,8 +108,10 @@ export const batchGetMatchingScores = async (
   }
 };
 
-export default {
+const matchingService = {
   getRecommendationsForApplicant,
   getMatchingScore,
   batchGetMatchingScores,
 };
+
+export default matchingService;

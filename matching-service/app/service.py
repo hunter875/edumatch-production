@@ -9,7 +9,11 @@ import logging
 
 from . import models, schemas
 from .config import settings
-from .matching import matching_engine
+from .matching import (
+    HYBRID_RANKING_SCORE_TYPE,
+    RULE_COMPATIBILITY_SCORE_TYPE,
+    matching_engine,
+)
 from .metrics import MATCHING_CACHE_EVENTS_TOTAL, MATCHING_RECOMMENDATION_FALLBACK_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -282,10 +286,15 @@ class MatchingService:
                 "_hardFiltersPassed": False,
                 "_constraintViolations": [reason],
                 "_explanations": [f"Cannot score because {reason}"],
+                "_algorithmVersion": matching_engine.rule_version,
+                "_modelVersion": matching_engine.rule_version,
+                "_scoreType": RULE_COMPATIBILITY_SCORE_TYPE,
+                "_corpusVersion": None,
             },
         )
 
     def _build_score_response(self, overall_score: float, breakdown: Dict[str, Any]) -> schemas.ScoreResponse:
+        score_type = breakdown.get("_scoreType") or RULE_COMPATIBILITY_SCORE_TYPE
         return schemas.ScoreResponse(
             overallScore=round(float(overall_score), 2),
             breakdown=schemas.ScoreBreakdown(
@@ -301,6 +310,9 @@ class MatchingService:
             constraintViolations=list(breakdown.get("_constraintViolations", [])),
             explanations=list(breakdown.get("_explanations", [])),
             algorithmVersion=breakdown.get("_algorithmVersion"),
+            scoreType=score_type,
+            modelVersion=breakdown.get("_modelVersion") or breakdown.get("_algorithmVersion"),
+            corpusVersion=breakdown.get("_corpusVersion"),
         )
 
     def _score_cache_expiry(self) -> datetime:
@@ -318,6 +330,8 @@ class MatchingService:
 
     def _is_cache_valid(self, score: models.MatchingScore, now: Optional[datetime] = None) -> bool:
         if not score.score_breakdown:
+            return False
+        if score.score_breakdown.get("_scoreType") != RULE_COMPATIBILITY_SCORE_TYPE:
             return False
         if score.score_breakdown.get("_algorithmVersion") != matching_engine.rule_version:
             return False
@@ -615,7 +629,9 @@ class MatchingService:
                 "missing_information": matched.get("missing_information"),
                 "source_url": matched.get("source_url"),
                 "last_verified_at": matched.get("last_verified_at"),
+                "score_type": matched.get("score_type") or HYBRID_RANKING_SCORE_TYPE,
                 "model_version": matched.get("model_version") or breakdown.get("_modelVersion"),
+                "corpus_version": matched.get("corpus_version") or breakdown.get("_corpusVersion"),
                 "profile_version": matched.get("profile_version"),
                 "opportunity_version": matched.get("opportunity_version"),
                 "breakdown": breakdown,
@@ -663,7 +679,9 @@ class MatchingService:
                     missing_information_json=recommendation.get("missing_information"),
                     source_url=recommendation.get("source_url"),
                     last_verified_at=recommendation.get("last_verified_at"),
+                    score_type=recommendation.get("score_type"),
                     model_version=recommendation.get("model_version"),
+                    corpus_version=recommendation.get("corpus_version"),
                     profile_version=recommendation.get("profile_version"),
                     opportunity_version=recommendation.get("opportunity_version"),
                     generated_at=generated_at,
@@ -696,7 +714,9 @@ class MatchingService:
                 "missing_information": item.get("missing_information") or breakdown.get("_missingInformation") or [],
                 "source_url": item.get("source_url"),
                 "last_verified_at": item.get("last_verified_at"),
+                "score_type": item.get("score_type") or breakdown.get("_scoreType") or HYBRID_RANKING_SCORE_TYPE,
                 "model_version": item.get("model_version") or breakdown.get("_modelVersion"),
+                "corpus_version": item.get("corpus_version") or breakdown.get("_corpusVersion"),
                 "profile_version": item.get("profile_version"),
                 "opportunity_version": item.get("opportunity_version"),
                 "generated_at": item.get("generated_at"),
@@ -713,7 +733,9 @@ class MatchingService:
             "missing_information": [],
             "source_url": None,
             "last_verified_at": None,
+            "score_type": RULE_COMPATIBILITY_SCORE_TYPE,
             "model_version": matching_engine.rule_version,
+            "corpus_version": None,
             "profile_version": None,
             "opportunity_version": None,
             "generated_at": None,
@@ -756,7 +778,9 @@ class MatchingService:
                 "missing_information": row.missing_information_json or [],
                 "source_url": row.source_url,
                 "last_verified_at": row.last_verified_at,
+                "score_type": row.score_type,
                 "model_version": row.model_version,
+                "corpus_version": row.corpus_version,
                 "profile_version": row.profile_version,
                 "opportunity_version": row.opportunity_version,
                 "generated_at": row.generated_at,
@@ -836,7 +860,9 @@ class MatchingService:
             "missing_information": breakdown.get("_missingInformation") or [],
             "source_url": None,
             "last_verified_at": None,
+            "score_type": breakdown.get("_scoreType") or RULE_COMPATIBILITY_SCORE_TYPE,
             "model_version": breakdown.get("_modelVersion") or breakdown.get("_algorithmVersion"),
+            "corpus_version": breakdown.get("_corpusVersion"),
             "profile_version": row.profile_version,
             "opportunity_version": row.opportunity_version,
             "generated_at": row.calculated_at,
@@ -878,7 +904,9 @@ class MatchingService:
                     missingInformation=item.get("missing_information") or [],
                     sourceUrl=item.get("source_url"),
                     lastVerifiedAt=item.get("last_verified_at"),
+                    scoreType=item.get("score_type"),
                     modelVersion=item.get("model_version"),
+                    corpusVersion=item.get("corpus_version"),
                     generatedAt=item.get("generated_at"),
                     profileVersion=item.get("profile_version"),
                     opportunityVersion=item.get("opportunity_version"),
@@ -900,7 +928,9 @@ class MatchingService:
                     missingInformation=item.get("missing_information") or [],
                     sourceUrl=item.get("source_url"),
                     lastVerifiedAt=item.get("last_verified_at"),
+                    scoreType=item.get("score_type"),
                     modelVersion=item.get("model_version"),
+                    corpusVersion=item.get("corpus_version"),
                     generatedAt=item.get("generated_at"),
                     profileVersion=item.get("profile_version"),
                     opportunityVersion=item.get("opportunity_version"),

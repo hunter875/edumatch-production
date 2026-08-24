@@ -5,11 +5,15 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import Any, List, Dict, Optional, Tuple
 from datetime import datetime, date
+import hashlib
+import json
 import logging
 
 logger = logging.getLogger(__name__)
 
 RULE_SCORER_VERSION = "hybrid-v2.0"
+RULE_COMPATIBILITY_SCORE_TYPE = "RULE_COMPATIBILITY"
+HYBRID_RANKING_SCORE_TYPE = "HYBRID_RANKING"
 HYBRID_V2_WEIGHTS = {
     "skill": 0.30,
     "textSimilarity": 0.25,
@@ -106,6 +110,8 @@ class MatchingEngine:
         scores['_explanations'] = self._build_explanations(scores, applicant_data, opportunity_data)
         scores['_algorithmVersion'] = self.rule_version
         scores['_modelVersion'] = self.rule_version
+        scores['_scoreType'] = RULE_COMPATIBILITY_SCORE_TYPE
+        scores['_corpusVersion'] = None
 
         return round(overall, 2), scores
 
@@ -127,6 +133,8 @@ class MatchingEngine:
             '_weights': HYBRID_V2_WEIGHTS,
             '_algorithmVersion': self.rule_version,
             '_modelVersion': self.rule_version,
+            '_scoreType': RULE_COMPATIBILITY_SCORE_TYPE,
+            '_corpusVersion': None,
             '_explanations': [
                 f"Rejected by hard filter: {violation}"
                 for violation in violation_list
@@ -442,6 +450,31 @@ class MatchingEngine:
             logger.warning("TF-IDF vectorizer fallback to rule-only ranking: %s", exc)
             return {candidate_id: 0.0 for candidate_id in candidate_ids}
 
+    def _corpus_version(self, opportunities_data: List[Dict]) -> str:
+        corpus_markers = []
+        for opportunity in opportunities_data:
+            candidate_id = str(opportunity.get("id") or opportunity.get("opportunity_id") or "")
+            version = (
+                opportunity.get("opportunity_version")
+                or opportunity.get("updated_at")
+                or opportunity.get("last_verified_at")
+                or ""
+            )
+            if hasattr(version, "isoformat"):
+                version = version.isoformat()
+            corpus_markers.append({
+                "id": candidate_id,
+                "version": str(version),
+            })
+
+        payload = json.dumps(
+            sorted(corpus_markers, key=lambda item: (item["id"], item["version"])),
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+        return f"opportunity-corpus:{self.rule_version}:{digest}"
+
     def calculate_hybrid_recommendations(
         self,
         applicant_data: Dict,
@@ -470,6 +503,7 @@ class MatchingEngine:
         if not ranking_corpus:
             return []
 
+        corpus_version = self._corpus_version(ranking_corpus)
         text_scores = self._tfidf_similarities(applicant_data, ranking_corpus)
         ranked_pool = sorted(
             ranking_corpus,
@@ -495,6 +529,8 @@ class MatchingEngine:
                 continue
             if score <= 0:
                 continue
+            breakdown["_scoreType"] = HYBRID_RANKING_SCORE_TYPE
+            breakdown["_corpusVersion"] = corpus_version
 
             results.append({
                 "candidate_id": candidate_id,
@@ -506,7 +542,9 @@ class MatchingEngine:
                 "missing_information": list(breakdown.get("_missingInformation", [])),
                 "components": dict(breakdown.get("_components", {})),
                 "reasons": list(breakdown.get("_explanations", [])),
+                "score_type": HYBRID_RANKING_SCORE_TYPE,
                 "model_version": breakdown.get("_modelVersion", self.rule_version),
+                "corpus_version": corpus_version,
                 "profile_version": applicant_data.get("profile_version"),
                 "opportunity_version": payload.get("opportunity_version"),
                 "breakdown": breakdown,
