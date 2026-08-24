@@ -1,12 +1,10 @@
 """
-Matching algorithms - Rule-based and ML-based scoring
+Matching algorithms - deterministic hybrid scoring.
 """
-import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import Any, List, Dict, Optional, Tuple
 from datetime import datetime, date
-import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -454,11 +452,32 @@ class MatchingEngine:
         if not opportunities_data:
             return []
 
-        text_scores = self._tfidf_similarities(applicant_data, opportunities_data)
+        eligible_candidates: List[Dict[str, Any]] = []
+        unknown_candidates: List[Dict[str, Any]] = []
+        for opportunity_data in opportunities_data:
+            eligibility = self.evaluate_eligibility(applicant_data, opportunity_data)
+            if eligibility["status"] == "INELIGIBLE":
+                continue
+
+            candidate = dict(opportunity_data)
+            candidate["_eligibility"] = eligibility
+            if eligibility["status"] == "ELIGIBLE":
+                eligible_candidates.append(candidate)
+            else:
+                unknown_candidates.append(candidate)
+
+        ranking_corpus = eligible_candidates + unknown_candidates
+        if not ranking_corpus:
+            return []
+
+        text_scores = self._tfidf_similarities(applicant_data, ranking_corpus)
         ranked_pool = sorted(
-            opportunities_data,
-            key=lambda item: text_scores.get(str(item.get("id") or item.get("opportunity_id") or ""), 0.0),
-            reverse=True,
+            ranking_corpus,
+            key=lambda item: (
+                0 if item["_eligibility"]["status"] == "ELIGIBLE" else 1,
+                -text_scores.get(str(item.get("id") or item.get("opportunity_id") or ""), 0.0),
+                str(item.get("id") or item.get("opportunity_id") or ""),
+            ),
         )[:retrieval_limit]
 
         results: List[Dict[str, Any]] = []
@@ -472,6 +491,8 @@ class MatchingEngine:
             payload = dict(opportunity_data)
             payload["tfidf_score"] = text_scores.get(candidate_id, 0.0)
             score, breakdown = self.calculate_rule_based_score(applicant_data, payload)
+            if breakdown.get("_eligibilityStatus") == "INELIGIBLE":
+                continue
             if score <= 0:
                 continue
 
@@ -491,10 +512,46 @@ class MatchingEngine:
                 "breakdown": breakdown,
             })
 
-        diversified = self._diversify_results(sorted(results, key=lambda item: item["score"], reverse=True))
+        diversified = self._diversify_results(sorted(
+            results,
+            key=lambda item: (
+                0 if item.get("eligibility_status") == "ELIGIBLE" else 1,
+                -float(item["score"]),
+                str(item.get("candidate_id") or ""),
+            ),
+        ))
         for index, result in enumerate(diversified, start=1):
             result["rank"] = index
         return diversified
+
+    def evaluate_eligibility(self, applicant_data: Dict, opportunity_data: Dict) -> Dict[str, Any]:
+        """Pure hard-eligibility evaluation without calculating weighted scores."""
+        violations, missing_information = self._hard_filter_state(applicant_data, opportunity_data)
+        if violations:
+            return {
+                "status": "INELIGIBLE",
+                "constraintViolations": violations,
+                "missingInformation": [],
+                "reasons": [f"Rejected by hard filter: {violation}" for violation in violations],
+            }
+
+        if missing_information:
+            return {
+                "status": "UNKNOWN",
+                "constraintViolations": [],
+                "missingInformation": missing_information,
+                "reasons": [
+                    f"Eligibility requires missing applicant field: {field}"
+                    for field in missing_information
+                ],
+            }
+
+        return {
+            "status": "ELIGIBLE",
+            "constraintViolations": [],
+            "missingInformation": [],
+            "reasons": [],
+        }
 
     def _diversify_results(self, results: List[Dict[str, Any]], limit: Optional[int] = None) -> List[Dict[str, Any]]:
         unique: List[Dict[str, Any]] = []
@@ -533,108 +590,6 @@ class MatchingEngine:
 
         return unique
     
-    def _calculate_gpa_score(
-        self,
-        applicant_gpa: Optional[float],
-        required_gpa: Optional[float]
-    ) -> float:
-        """Calculate GPA matching score"""
-        if applicant_gpa is None:
-            return 50.0  # Neutral score if no GPA data
-        
-        if required_gpa is None:
-            return 75.0  # Good score if no requirement
-        
-        if applicant_gpa >= required_gpa:
-            # Bonus for exceeding requirement
-            bonus = min((applicant_gpa - required_gpa) * 20, 25)
-            return min(75.0 + bonus, 100.0)
-        else:
-            # Penalty for not meeting requirement
-            gap = required_gpa - applicant_gpa
-            penalty = gap * 30
-            return max(0, 50 - penalty)
-    
-    def _calculate_skills_overlap(
-        self,
-        applicant_skills: List[str],
-        required_skills: List[str]
-    ) -> float:
-        """Calculate skill overlap score using Jaccard similarity"""
-        if not required_skills:
-            return 75.0  # Good score if no requirements
-        
-        if not applicant_skills:
-            return 0.0  # No skills = 0 score
-        
-        # Normalize to lowercase for comparison
-        applicant_set = set(skill.lower().strip() for skill in applicant_skills)
-        required_set = set(skill.lower().strip() for skill in required_skills)
-        
-        # Jaccard similarity
-        intersection = len(applicant_set & required_set)
-        union = len(applicant_set | required_set)
-        
-        if union == 0:
-            return 0.0
-        
-        jaccard = intersection / union
-        
-        # Also check coverage of required skills
-        coverage = intersection / len(required_set) if len(required_set) > 0 else 0
-        
-        # Weighted combination: 60% coverage + 40% jaccard
-        score = (coverage * 0.6 + jaccard * 0.4) * 100
-        
-        return round(score, 2)
-
-    def _calculate_major_score(
-        self,
-        applicant_major: Optional[str],
-        preferred_majors: List[str]
-    ) -> float:
-        """Calculate major/field fit."""
-        if not preferred_majors:
-            return 75.0
-        if not applicant_major:
-            return 50.0
-
-        applicant = applicant_major.lower().strip()
-        preferred = [major.lower().strip() for major in preferred_majors if major]
-
-        if applicant in preferred:
-            return 100.0
-
-        applicant_tokens = set(applicant.replace('-', ' ').split())
-        best_overlap = 0.0
-        for major in preferred:
-            preferred_tokens = set(major.replace('-', ' ').split())
-            if not preferred_tokens:
-                continue
-            overlap = len(applicant_tokens & preferred_tokens) / len(preferred_tokens)
-            best_overlap = max(best_overlap, overlap)
-
-        return round(best_overlap * 100, 2) if best_overlap > 0 else 25.0
-
-    def _calculate_optional_exact_match(
-        self,
-        applicant_value: Optional[str],
-        opportunity_value: Optional[str]
-    ) -> float:
-        """Neutral when data is missing, exact/fuzzy when both sides exist."""
-        if not opportunity_value:
-            return 75.0
-        if not applicant_value:
-            return 50.0
-
-        applicant = applicant_value.lower().strip()
-        opportunity = opportunity_value.lower().strip()
-        if applicant == opportunity:
-            return 100.0
-        if applicant in opportunity or opportunity in applicant:
-            return 80.0
-        return 25.0
-
     def _build_explanations(
         self,
         scores: Dict[str, float],
@@ -662,132 +617,11 @@ class MatchingEngine:
         if opportunity_data.get('deadline_days') is not None:
             explanations.append(f"Deadline is {int(float(opportunity_data['deadline_days']))} days away")
 
+        missing_information = scores.get("_missingInformation") or []
+        for field in missing_information:
+            explanations.append(f"Eligibility requires missing applicant field: {field}")
+
         return explanations
-
-    def _calculate_opportunity_boost(self, opportunity_data: Dict) -> float:
-        """Small optional boost for high-signal opportunities."""
-        amount = opportunity_data.get('scholarship_amount')
-        deadline_days = opportunity_data.get('deadline_days')
-
-        score = 50.0
-        if amount is not None:
-            try:
-                if float(amount) >= 30000:
-                    score += 25.0
-                elif float(amount) >= 10000:
-                    score += 10.0
-            except (TypeError, ValueError):
-                pass
-
-        if deadline_days is not None:
-            try:
-                days = float(deadline_days)
-                if 7 <= days <= 90:
-                    score += 15.0
-            except (TypeError, ValueError):
-                pass
-
-        return min(score, 100.0)
-    
-    # ========== ML-based Scoring (Slower, for recommendations) ==========
-    
-    def calculate_ml_based_scores(
-        self,
-        target_features: Dict,
-        candidates_features: List[Dict]
-    ) -> List[Tuple[str, float]]:
-        """
-        Tính điểm ML-based sử dụng TF-IDF + Cosine Similarity
-        Dùng cho API recommendations (chấp nhận chậm)
-        
-        Args:
-            target_features: Features của applicant HOẶC opportunity (target)
-            candidates_features: List features của các candidates
-        
-        Returns:
-            List of (candidate_id, matching_score) sorted by score descending
-        """
-        try:
-            # Extract vectors from features
-            target_vector = self._get_combined_vector(target_features)
-            
-            results = []
-            for candidate in candidates_features:
-                candidate_id = candidate.get('id')
-                candidate_vector = self._get_combined_vector(candidate)
-                
-                # Calculate cosine similarity
-                similarity = self._cosine_similarity(target_vector, candidate_vector)
-                score = round(similarity * 100, 2)
-                
-                results.append((candidate_id, score))
-            
-            # Sort by score descending
-            results.sort(key=lambda x: x[1], reverse=True)
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"Error in ML-based scoring: {e}")
-            return []
-    
-    def _get_combined_vector(self, features: Dict) -> Optional[np.ndarray]:
-        """Get or create combined feature vector"""
-        # Try to use precomputed vectors
-        skills_vector = features.get('skills_vector')
-        research_vector = features.get('research_vector')
-        
-        if skills_vector and research_vector:
-            # Combine precomputed vectors
-            try:
-                skills_arr = np.array(skills_vector) if isinstance(skills_vector, list) else np.array(json.loads(skills_vector))
-                research_arr = np.array(research_vector) if isinstance(research_vector, list) else np.array(json.loads(research_vector))
-                
-                # Concatenate and normalize
-                combined = np.concatenate([skills_arr, research_arr])
-                return combined / (np.linalg.norm(combined) + 1e-10)
-            except Exception as e:
-                logger.warning(f"Error loading precomputed vectors: {e}")
-        
-        # Fallback: use combined text
-        combined_text = features.get('combined_text', '')
-        if combined_text:
-            # Simple TF-IDF on-the-fly (not ideal, but works)
-            try:
-                vector = self.tfidf_vectorizer.fit_transform([combined_text])
-                return vector.toarray()[0]
-            except Exception as e:
-                logger.error(f"Error creating TF-IDF vector: {e}")
-        
-        return None
-    
-    def _cosine_similarity(self, vec1: Optional[np.ndarray], vec2: Optional[np.ndarray]) -> float:
-        """Calculate cosine similarity between two vectors"""
-        if vec1 is None or vec2 is None:
-            return 0.5  # Neutral score if vectors missing
-        
-        try:
-            # Ensure same length (pad with zeros if needed)
-            max_len = max(len(vec1), len(vec2))
-            vec1_padded = np.pad(vec1, (0, max_len - len(vec1)))
-            vec2_padded = np.pad(vec2, (0, max_len - len(vec2)))
-            
-            # Calculate cosine similarity
-            dot_product = np.dot(vec1_padded, vec2_padded)
-            norm1 = np.linalg.norm(vec1_padded)
-            norm2 = np.linalg.norm(vec2_padded)
-            
-            if norm1 == 0 or norm2 == 0:
-                return 0.0
-            
-            similarity = dot_product / (norm1 * norm2)
-            
-            # Ensure result is between 0 and 1
-            return max(0.0, min(1.0, similarity))
-            
-        except Exception as e:
-            logger.error(f"Error calculating cosine similarity: {e}")
-            return 0.5
     
     # ========== Feature Preprocessing (for RabbitMQ event handlers) ==========
     
@@ -809,21 +643,12 @@ class MatchingEngine:
             research_text = " ".join(research_interests) if research_interests else ""
             combined = f"{skills_text} {research_text} {additional_text}".strip()
             
-            # Create TF-IDF vectors (simplified - in production use trained vectorizer)
             result = {
                 'combined_text': combined,
                 'skills_vector': [],
                 'research_vector': []
             }
-            
-            # For now, store simple word frequency vectors
-            # In production, use fitted TfidfVectorizer and save vectors
-            if skills_text:
-                result['skills_vector'] = self._simple_vectorize(skills_text)
-            
-            if research_text:
-                result['research_vector'] = self._simple_vectorize(research_text)
-            
+
             return result
             
         except Exception as e:
@@ -833,17 +658,6 @@ class MatchingEngine:
                 'skills_vector': [],
                 'research_vector': []
             }
-    
-    def _simple_vectorize(self, text: str, max_features: int = 100) -> List[float]:
-        """Simple word frequency vectorization"""
-        words = text.lower().split()
-        word_freq = {}
-        for word in words:
-            word_freq[word] = word_freq.get(word, 0) + 1
-        
-        # Return as list (JSON serializable)
-        return list(word_freq.values())[:max_features]
-
 
 # Global instance
 matching_engine = MatchingEngine()

@@ -115,6 +115,16 @@ opportunityVersion
 
 Recommendation cache rows store rank, eligibility status, component JSON, reasons JSON, missing-information JSON, model version, profile version, opportunity version, generated time, and expiry. Delivery reliability is documented as at-least-once, not exactly-once.
 
+Event consumption uses a status-aware `processed_events` ledger:
+
+- new events are claimed as `PROCESSING`
+- `PROCESSED` redeliveries are acknowledged as completed duplicates
+- active `PROCESSING` leases are not treated as completed duplicates
+- expired leases can be reclaimed by a later delivery
+- handler failures record retryable error state
+
+RabbitMQ retries use bounded delay queues rather than immediate `requeue=True` loops. The default delays are `5s`, `30s`, and `120s`; after the configured retry budget the message is routed to the final DLQ.
+
 Earlier implementation phases used this practical baseline:
 
 ```txt

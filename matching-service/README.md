@@ -1,6 +1,6 @@
 # Matching Service
 
-Rule-based matching and recommendation service cho EduMatch platform.
+Deterministic, explainable hybrid matching and recommendation service cho EduMatch platform.
 
 ## 📋 Tổng quan
 
@@ -34,8 +34,8 @@ Matching Service là microservice lõi chịu trách nhiệm:
 
 1. **FastAPI Server**: REST API endpoints
    - `POST /api/v1/match/score` - Tính điểm real-time (< 300ms)
-   - `GET /api/v1/recommendations/applicant/{id}` - Gợi ý cho applicant (2-5s)
-   - `GET /api/v1/recommendations/opportunity/{id}` - Gợi ý cho opportunity (2-5s)
+   - `GET /api/v1/recommendations/applicant/{id}` - Gợi ý cho applicant từ cache/read model
+   - `GET /api/v1/recommendations/opportunity/{id}` - Gợi ý cho opportunity từ cache/read model
 
 2. **RabbitMQ event handlers**: Background feature processing
    - Xử lý event `user.profile.updated`
@@ -45,6 +45,7 @@ Matching Service là microservice lõi chịu trách nhiệm:
 3. **RabbitMQ Consumer**: Event listener
    - Lắng nghe events từ RabbitMQ
    - Gọi matching event handlers trong consumer process hiện tại
+   - Dùng status-aware processed event ledger, bounded retry queues, và DLQ
 
 4. **PostgreSQL**: Feature storage
    - Lưu applicant_features
@@ -58,7 +59,7 @@ Matching Service là microservice lõi chịu trách nhiệm:
 - **RabbitMQ** - Message broker
 - **PostgreSQL** - Relational database
 - **SQLAlchemy** - ORM
-- **scikit-learn** - ML algorithms (TF-IDF, Cosine Similarity)
+- **scikit-learn** - TF-IDF text retrieval and cosine similarity
 - **pandas & numpy** - Data processing
 
 ## 📦 Cài đặt
@@ -120,7 +121,7 @@ Response:
 
 ### 2. Get Recommendations for Applicant
 
-**Slow, ML-based (2-5s)**
+**Deterministic hybrid recommendations from precomputed cache/read models**
 
 ```bash
 GET /api/v1/recommendations/applicant/{applicantId}?limit=10&page=1
@@ -150,7 +151,7 @@ Response:
 
 ### 3. Get Recommendations for Opportunity
 
-**Slow, ML-based (2-5s)**
+**Deterministic hybrid recommendations from precomputed cache/read models**
 
 ```bash
 GET /api/v1/recommendations/opportunity/{opportunityId}?limit=10&page=1
@@ -217,28 +218,28 @@ Same structure as `scholarship.created`
 
 ## 🧮 Matching Algorithms
 
-### Rule-based Scoring (Fast)
+### Hybrid v2 Scoring
 
-Dùng cho API `/match/score`:
+Dùng cho scoring và recommendation precompute:
 
 ```python
-Overall Score = 
-  GPA Score (30%) + 
-  Skills Match (50%) + 
-  Research Match (20%)
+Overall Score =
+  skill (0.30) +
+  textSimilarity (0.25) +
+  major (0.15) +
+  interest (0.10) +
+  funding (0.08) +
+  location (0.05) +
+  gpa (0.04) +
+  freshness (0.03)
 ```
 
-- **GPA Score**: So sánh GPA với requirement
-- **Skills Match**: Jaccard similarity + coverage
-- **Research Match**: Overlap của research interests
+- **Hard eligibility**: chạy trước retrieval/ranking; `INELIGIBLE` bị loại.
+- **Missing required profile data**: trả `UNKNOWN` + `missingInformation`, không giả lập eligible.
+- **TF-IDF retrieval**: fit một lần trên opportunity corpus đã qua eligibility filter, applicant dùng cùng vectorizer qua `transform()`.
+- **Structured score**: deterministic weighted components, `hybrid-v2.0`.
 
-### ML-based Scoring (Slow)
-
-Dùng cho API `/recommendations/*`:
-
-1. **TF-IDF Vectorization**: Convert text → vectors
-2. **Cosine Similarity**: Calculate similarity scores
-3. **Ranking**: Sort by score descending
+Không dùng LLM hoặc external embedding API trong hot path.
 
 ## 🔄 Data Flow
 
@@ -376,9 +377,9 @@ Tracks `constraint_violation_rate`, `precision@k`, `recall@k`, `ndcg@k`, `covera
 
 ## 📈 Performance
 
-- **Score API**: < 300ms (rule-based, fast)
-- **Recommendation API**: 2-5 seconds (ML-based, acceptable)
-- **Worker throughput**: ~100 events/minute
+- **Score API**: measured as API latency, not database-only latency
+- **Recommendation API**: cache/read-model response latency should be measured in the target environment
+- **Worker throughput**: depends on corpus size and RabbitMQ retry behavior; measure in staging
 - **Scaling**: Stateless, can scale horizontally
 
 ## 🔐 Security

@@ -504,7 +504,7 @@ class MatchingService:
             )
 
         applicants = query.all()
-        scored_results = self._score_applicants_for_opportunity(opportunity, applicants)
+        scored_results = self._recompute_applicants_for_opportunity(opportunity, applicants)
 
         self._replace_recommendation_cache("opportunity", opportunity_id, "applicant", scored_results)
         return self._build_recommendation_response("opportunity", scored_results, limit, page)
@@ -535,13 +535,6 @@ class MatchingService:
         ).delete(synchronize_session=False)
         self.db.commit()
 
-    def _calculate_recommendations(self, target: Dict, candidates: List[Dict]) -> List[Tuple[str, float]]:
-        if not candidates:
-            return []
-
-        logger.info("Calculating ML scores for %s candidates", len(candidates))
-        return matching_engine.calculate_ml_based_scores(target, candidates)
-
     def _score_opportunities_for_applicant(
         self,
         applicant: models.ApplicantFeature,
@@ -571,28 +564,72 @@ class MatchingService:
 
         return scored_results
 
-    def _score_applicants_for_opportunity(
+    def _recompute_applicants_for_opportunity(
         self,
         opportunity: models.OpportunityFeature,
         applicants: List[models.ApplicantFeature],
-    ) -> List[Tuple[str, float]]:
-        scored_results: List[Tuple[str, float]] = []
-        for applicant in applicants:
-            score, breakdown = self._calculate_score_from_features(applicant, opportunity)
-            if score <= 0:
-                continue
-            scored_results.append((str(applicant.applicant_id), round(float(score), 2)))
-            self._upsert_score_cache(
-                str(applicant.applicant_id),
-                str(opportunity.opportunity_id),
-                score,
-                breakdown,
-                commit=False,
-                profile_version=self._feature_version(applicant, "profile_version"),
-                opportunity_version=self._feature_version(opportunity, "opportunity_version"),
-            )
+    ) -> List[Dict[str, Any]]:
+        """Use the canonical applicant-to-opportunity pipeline for opportunity-triggered refreshes."""
+        today = datetime.utcnow().date()
+        active_opportunities = self.db.query(models.OpportunityFeature).filter(
+            (
+                (models.OpportunityFeature.is_public == None)  # noqa: E711
+                | (models.OpportunityFeature.is_public == True)  # noqa: E712
+            ),
+            (
+                (models.OpportunityFeature.moderation_status == None)  # noqa: E711
+                | (models.OpportunityFeature.moderation_status.in_(["APPROVED", "approved", "ACTIVE", "active", "PUBLISHED", "published"]))
+            ),
+            (
+                (models.OpportunityFeature.application_deadline == None)  # noqa: E711
+                | (models.OpportunityFeature.application_deadline >= today)
+            ),
+        ).all()
 
-        scored_results.sort(key=lambda item: item[1], reverse=True)
+        scored_results: List[Dict[str, Any]] = []
+        for applicant in applicants:
+            applicant_results = self._score_opportunities_for_applicant(applicant, active_opportunities)
+            self._replace_recommendation_cache(
+                "applicant",
+                str(applicant.applicant_id),
+                "opportunity",
+                applicant_results,
+            )
+            matched = next(
+                (
+                    result for result in applicant_results
+                    if str(result.get("candidate_id")) == str(opportunity.opportunity_id)
+                ),
+                None,
+            )
+            if not matched:
+                continue
+
+            breakdown = matched.get("breakdown") or {}
+            scored_results.append({
+                "candidate_id": str(applicant.applicant_id),
+                "score": round(float(matched["score"]), 2),
+                "eligibility_status": matched.get("eligibility_status"),
+                "components": matched.get("components"),
+                "reasons": matched.get("reasons"),
+                "missing_information": matched.get("missing_information"),
+                "source_url": matched.get("source_url"),
+                "last_verified_at": matched.get("last_verified_at"),
+                "model_version": matched.get("model_version") or breakdown.get("_modelVersion"),
+                "profile_version": matched.get("profile_version"),
+                "opportunity_version": matched.get("opportunity_version"),
+                "breakdown": breakdown,
+            })
+
+        scored_results.sort(
+            key=lambda item: (
+                0 if item.get("eligibility_status") == "ELIGIBLE" else 1,
+                -float(item["score"]),
+                str(item["candidate_id"]),
+            )
+        )
+        for index, result in enumerate(scored_results, start=1):
+            result["rank"] = index
         return scored_results
 
     def _replace_recommendation_cache(

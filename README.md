@@ -29,7 +29,7 @@ The project is built as a multi-service system to practice backend architecture,
 | Frontend | Next.js, React, TypeScript, Tailwind CSS, React Query |
 | Backend | Java Spring Boot, FastAPI |
 | Databases | MySQL, PostgreSQL, Redis |
-| Messaging / Workers | RabbitMQ, inline matching consumers, Celery-compatible task handlers |
+| Messaging / Workers | RabbitMQ, inline matching consumers |
 | Auth | JWT, role-based access control |
 | Gateway / Infra | Nginx, Docker, Docker Compose |
 | CI/CD | GitHub Actions, Azure Container Apps |
@@ -56,7 +56,7 @@ flowchart LR
     SCH --> MQ
     CHAT --> MQ
     MATCH --> MQ
-    MQ --> WORKER["Matching Consumer<br/>Task Handlers"]
+    MQ --> WORKER["Matching Consumer<br/>Retry/DLQ Handlers"]
     WORKER --> MATCHDB
 ```
 
@@ -94,17 +94,17 @@ different performance questions.
 
 ## Matching Service
 
-The matching service is intentionally designed as a hybrid recommendation foundation rather than a direct LLM-on-request system.
+The matching service is intentionally designed as a deterministic, explainable hybrid recommendation foundation rather than a direct LLM-on-request system.
 
 Current matching flow:
 
 1. Store applicant and opportunity features in PostgreSQL.
-2. Apply hard filters such as GPA, public/approved status, deadline, and optional level/location/study mode when data is available.
-3. Calculate rule-based score breakdown for skills, major, GPA, level, location/study mode, and opportunity boost.
+2. Apply hard eligibility filters before retrieval/ranking; ineligible candidates are excluded and missing required applicant data is reported as `UNKNOWN`.
+3. Fit TF-IDF once on the eligible/unknown opportunity corpus, transform the applicant with the same vectorizer, then calculate structured weighted score components.
 4. Support batch scoring for scholarship cards.
 5. Store applicant-opportunity scores in `matching_scores`.
 6. Store top-N recommendations in `recommendation_cache`.
-7. Use RabbitMQ consumer/event processing to refresh matching features and cached recommendations.
+7. Use RabbitMQ consumer/event processing with status-aware event claims, bounded retry queues, and DLQ routing to refresh matching features and cached recommendations.
 
 The project does not call an LLM in the hot path. If AI is added later, the intended use is offline profile parsing, skill normalization, embeddings, and cached explanations.
 

@@ -1,6 +1,6 @@
 """
 Matching Service - FastAPI Main Application
-Provides ML-based matching and recommendation APIs
+Provides deterministic hybrid matching and recommendation APIs
 """
 import logging
 import time
@@ -118,7 +118,7 @@ HTTP_REQUEST_DURATION_SECONDS = Histogram(
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="ML-based matching and recommendation service",
+    description="Deterministic hybrid matching and recommendation service",
     docs_url="/docs" if settings.ENABLE_DOCS else None,
     redoc_url="/redoc" if settings.ENABLE_DOCS else None,
     openapi_url="/api/v1/openapi.json" if settings.ENABLE_DOCS else None,
@@ -269,6 +269,11 @@ def ensure_schema_compatibility():
         "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS profile_version VARCHAR(100)",
         "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS opportunity_version VARCHAR(100)",
         "ALTER TABLE recommendation_cache ADD COLUMN IF NOT EXISTS generated_at TIMESTAMP",
+        "ALTER TABLE processed_events ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMP",
+        "ALTER TABLE processed_events ADD COLUMN IF NOT EXISTS lease_until TIMESTAMP",
+        "ALTER TABLE processed_events ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE processed_events ADD COLUMN IF NOT EXISTS last_error TEXT",
+        "ALTER TABLE processed_events ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP",
         "CREATE INDEX IF NOT EXISTS ix_matching_score_applicant_opportunity ON matching_scores (applicant_id, opportunity_id)",
         "CREATE INDEX IF NOT EXISTS ix_matching_score_applicant_score_desc ON matching_scores (applicant_id, overall_score DESC)",
         "CREATE INDEX IF NOT EXISTS ix_matching_score_expires ON matching_scores (expires_at)",
@@ -276,6 +281,7 @@ def ensure_schema_compatibility():
         "CREATE INDEX IF NOT EXISTS ix_recommendation_target_rank ON recommendation_cache (target_type, target_id, rank)",
         "CREATE INDEX IF NOT EXISTS ix_recommendation_model_version ON recommendation_cache (model_version)",
         "CREATE INDEX IF NOT EXISTS ix_recommendation_expires ON recommendation_cache (expires_at)",
+        "CREATE INDEX IF NOT EXISTS ix_processed_events_lease_until ON processed_events (lease_until)",
     ]
     with engine.begin() as connection:
         for statement in statements:
@@ -534,7 +540,7 @@ async def get_recommendations_for_applicant(
     Get opportunity recommendations for an applicant
 
     **Requires authentication.** USER can only query their own recommendations.
-    **⚠️ WARNING:** This API is SLOW (2-5 seconds) as it performs ML computation on-the-fly
+    Reads precomputed cache/read-model rows; asynchronous workers refresh the heavier matching pipeline.
     """
     _check_rate_limit(_recommend_limiter, http_request)
 
@@ -575,7 +581,7 @@ async def get_recommendations_for_opportunity(
 
     **Requires authentication.** EMPLOYER and ADMIN only.
     USER must use /api/v1/recommendations/applicant/{yourId} instead.
-    **⚠️ WARNING:** This API is SLOW (2-5 seconds) as it performs ML computation on-the-fly
+    Reads precomputed cache/read-model rows; asynchronous workers refresh the heavier matching pipeline.
     """
     _check_rate_limit(_recommend_limiter, http_request)
 

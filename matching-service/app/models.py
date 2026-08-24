@@ -183,9 +183,15 @@ class ProcessedEvent(Base):
     routing_key = Column(String(255), nullable=False)
     status = Column(String(30), nullable=False, default="PROCESSING")
     first_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    claimed_at = Column(DateTime, nullable=True)
+    lease_until = Column(DateTime, nullable=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    last_error = Column(Text, nullable=True)
     processed_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
 
     __table_args__ = (
         Index("ix_processed_events_routing_key", "routing_key"),
         Index("ix_processed_events_status", "status"),
+        Index("ix_processed_events_lease_until", "lease_until"),
     )
