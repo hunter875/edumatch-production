@@ -66,12 +66,16 @@ export interface CreateOpportunityRequest {
   startDate: string; // ISO date string (YYYY-MM-DD)
   endDate: string | null; // ISO date string (YYYY-MM-DD) or null
   scholarshipAmount: number;
-  minGpa?: number;
+  fundingType?: string | null;
+  minGpa?: number | null;
   studyMode: string; // FULL_TIME, PART_TIME, ONLINE, HYBRID
   level: string; // UNDERGRADUATE, MASTER, PHD, POSTDOC, RESEARCH
   isPublic: boolean;
   contactEmail?: string;
   website?: string | null;
+  sourceUrl?: string | null;
+  eligibleMajors?: string[];
+  eligibleNationalities?: string[];
   tags?: string[]; // Array of tag names
   requiredSkills?: string[]; // Array of skill names
 }
@@ -156,7 +160,7 @@ const _transformOpportunity = (item: any): Scholarship => {
     department: item.department || '',
     duration: item.durationMonths || item.duration || 0, // durationMonths → duration
     isRemote: item.studyMode === 'ONLINE' || item.studyMode === 'HYBRID' || item.isRemote, // studyMode → isRemote
-    minGpa: item.minGpa || 0,
+    minGpa: item.minGpa ?? null,
     requirements: {
       minGpa: item.minGpa,
       englishProficiency: item.englishProficiency,
@@ -170,6 +174,11 @@ const _transformOpportunity = (item: any): Scholarship => {
     // Optional fields
     tags: item.tags || [],
     website: item.website,
+    sourceUrl: item.sourceUrl,
+    fundingType: item.fundingType,
+    eligibleMajors: item.eligibleMajors || [],
+    eligibleNationalities: item.eligibleNationalities || [],
+    opportunityVersion: item.opportunityVersion,
     contactEmail: item.contactEmail,
     isPublic: item.isPublic,
     matchScore: item.matchScore,

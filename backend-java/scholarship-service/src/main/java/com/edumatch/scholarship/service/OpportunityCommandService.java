@@ -49,12 +49,16 @@ public class OpportunityCommandService {
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
                 .scholarshipAmount(request.getScholarshipAmount())
+                .fundingType(request.getFundingType())
                 .minGpa(request.getMinGpa())
                 .studyMode(request.getStudyMode())
                 .level(request.getLevel())
                 .isPublic(request.getIsPublic())
                 .contactEmail(request.getContactEmail())
                 .website(request.getWebsite())
+                .sourceUrl(request.getSourceUrl())
+                .eligibleMajors(joinCsv(request.getEligibleMajors()))
+                .eligibleNationalities(joinCsv(request.getEligibleNationalities()))
                 .moderationStatus(ModerationStatus.PENDING)
                 .tags(collectionService.resolveTags(request.getTags()))
                 .requiredSkills(collectionService.resolveSkills(request.getRequiredSkills()))
@@ -161,11 +165,15 @@ public class OpportunityCommandService {
         opp.setStartDate(request.getStartDate());
         opp.setEndDate(request.getEndDate());
         opp.setScholarshipAmount(request.getScholarshipAmount());
+        opp.setFundingType(request.getFundingType());
         opp.setStudyMode(request.getStudyMode());
         opp.setLevel(request.getLevel());
         opp.setIsPublic(request.getIsPublic());
         opp.setContactEmail(request.getContactEmail());
         opp.setWebsite(request.getWebsite());
+        opp.setSourceUrl(request.getSourceUrl());
+        opp.setEligibleMajors(joinCsv(request.getEligibleMajors()));
+        opp.setEligibleNationalities(joinCsv(request.getEligibleNationalities()));
         opp.setMinGpa(request.getMinGpa());
         opp.setTags(collectionService.resolveTags(request.getTags()));
         opp.setRequiredSkills(collectionService.resolveSkills(request.getRequiredSkills()));
@@ -185,5 +193,16 @@ public class OpportunityCommandService {
         opp.getTags().clear();
         opp.getRequiredSkills().clear();
         opportunityRepository.delete(opp);
+    }
+
+    private String joinCsv(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return null;
+        }
+        String joined = values.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .collect(Collectors.joining(","));
+        return joined.isBlank() ? null : joined;
     }
 }

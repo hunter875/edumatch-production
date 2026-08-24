@@ -9,6 +9,8 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -33,6 +35,7 @@ public class OpportunityDto {
 
     private BigDecimal minGpa; 
     private BigDecimal scholarshipAmount; // MỚI: Tiền học bổng
+    private String fundingType;
 
     // --- TRƯỜNG MỚI CHO CẤU TRÚC ---
     private String studyMode;
@@ -43,6 +46,7 @@ public class OpportunityDto {
     // --- TRƯỜNG MỚI CHO CONTACT ---
     private String contactEmail;
     private String website;
+    private String sourceUrl;
     // --- ------------------------ ---
 
     // --- TRƯỜNG MỚI CHO ĐỊA ĐIỂM & TRƯỜNG HỌC ---
@@ -54,6 +58,9 @@ public class OpportunityDto {
 
     private List<String> tags; // 
     private List<String> requiredSkills; // 
+    private List<String> preferredMajors;
+    private List<String> eligibleMajors;
+    private List<String> eligibleNationalities;
 
     // private String minExperienceLevel; // ĐÃ XÓA
     // private String position; // ĐÃ XÓA 
@@ -61,6 +68,8 @@ public class OpportunityDto {
     private String moderationStatus; // 
     private Integer viewsCnt; // 
     private Long applicationCount;
+    private String providerId;
+    private String opportunityVersion;
 
     // Hàm helper để chuyển từ Entity (Database) -> DTO (API)
     public static OpportunityDto fromEntity(Opportunity opp) {
@@ -76,11 +85,13 @@ public class OpportunityDto {
                 .startDate(opp.getStartDate())
                 .endDate(opp.getEndDate())
                 .scholarshipAmount(opp.getScholarshipAmount())
+                .fundingType(opp.getFundingType())
                 .studyMode(opp.getStudyMode())
                 .level(opp.getLevel())
                 .isPublic(opp.getIsPublic())
                 .contactEmail(opp.getContactEmail())
                 .website(opp.getWebsite())
+                .sourceUrl(opp.getSourceUrl() != null ? opp.getSourceUrl() : opp.getWebsite())
 
                 // ÁNH XẠ ĐỊA ĐIỂM & TRƯỜNG HỌC
                 .location(opp.getLocation())
@@ -97,10 +108,35 @@ public class OpportunityDto {
                 .requiredSkills((opp.getRequiredSkills() == null ? Set.<Skill>of() : opp.getRequiredSkills()).stream()
                         .map(Skill::getName)
                         .collect(Collectors.toList()))
+                .preferredMajors((opp.getTags() == null ? Set.<Tag>of() : opp.getTags()).stream()
+                        .map(Tag::getName)
+                        .collect(Collectors.toList()))
+                .eligibleMajors(splitCsv(opp.getEligibleMajors()))
+                .eligibleNationalities(splitCsv(opp.getEligibleNationalities()))
 
                 .moderationStatus(opp.getModerationStatus() != null ? opp.getModerationStatus().name() : null)
                 .viewsCnt(opp.getViewsCnt())
                 .applicationCount(0L)
+                .providerId(String.valueOf(opp.getCreatorUserId()))
+                .opportunityVersion(opportunityVersion(opp))
                 .build();
+    }
+
+    private static List<String> splitCsv(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        return Arrays.stream(value.split(","))
+                .map(String::trim)
+                .filter(item -> !item.isBlank())
+                .toList();
+    }
+
+    private static String opportunityVersion(Opportunity opp) {
+        LocalDateTime marker = opp.getUpdatedAt() != null ? opp.getUpdatedAt() : opp.getCreatedAt();
+        if (marker != null) {
+            return marker.toString();
+        }
+        return "opportunity-" + opp.getId();
     }
 }

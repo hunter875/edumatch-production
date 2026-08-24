@@ -124,6 +124,7 @@ class ScholarshipCreatedEvent(BaseModel):
     location: Optional[str] = None
     fundingType: Optional[str] = None
     providerId: Optional[str] = None
+    creatorUserId: Optional[int] = None
     sourceUrl: Optional[str] = None
     lastVerifiedAt: Optional[datetime] = None
     isPublic: Optional[bool] = None
@@ -138,6 +139,14 @@ class ScholarshipCreatedEvent(BaseModel):
     def get_opportunity_id(self) -> str:
         """Get opportunity ID from either field"""
         return str(self.opportunityId or self.id or "")
+
+    def get_provider_id(self) -> Optional[str]:
+        """Accept canonical providerId and older creatorUserId producer payloads."""
+        if self.providerId is not None:
+            return str(self.providerId)
+        if self.creatorUserId is not None:
+            return str(self.creatorUserId)
+        return None
 
     def get_application_deadline(self) -> Optional[date]:
         """Accept both Java DTO applicationDeadline and legacy deadline."""
@@ -184,6 +193,7 @@ class ScholarshipUpdatedEvent(BaseModel):
     location: Optional[str] = None
     fundingType: Optional[str] = None
     providerId: Optional[str] = None
+    creatorUserId: Optional[int] = None
     sourceUrl: Optional[str] = None
     lastVerifiedAt: Optional[datetime] = None
     isPublic: Optional[bool] = None
@@ -198,6 +208,14 @@ class ScholarshipUpdatedEvent(BaseModel):
     def get_opportunity_id(self) -> str:
         """Get opportunity ID from either field"""
         return str(self.opportunityId or self.id or "")
+
+    def get_provider_id(self) -> Optional[str]:
+        """Accept canonical providerId and older creatorUserId producer payloads."""
+        if self.providerId is not None:
+            return str(self.providerId)
+        if self.creatorUserId is not None:
+            return str(self.creatorUserId)
+        return None
 
     def get_application_deadline(self) -> Optional[date]:
         """Accept both Java DTO applicationDeadline and legacy deadline."""

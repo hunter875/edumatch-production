@@ -9,6 +9,7 @@ import com.example.jwt.example.repository.UserRepository;
 import com.example.jwt.example.service.CachedUserLookupService;
 import com.example.jwt.example.service.FileStorageService;
 import com.example.jwt.example.service.UserCacheEvictionService;
+import com.example.jwt.example.service.UserProfileEventPayloadFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -73,6 +74,12 @@ public class UserController {
         response.put("major", user.getMajor());
         response.put("university", user.getUniversity());
         response.put("yearOfStudy", user.getYearOfStudy());
+        response.put("level", user.getLevel());
+        response.put("studyMode", user.getStudyMode());
+        response.put("location", user.getLocation());
+        response.put("nationality", user.getNationality());
+        response.put("preferredLocations", user.getPreferredLocations());
+        response.put("preferredFundingTypes", user.getPreferredFundingTypes());
         response.put("skills", user.getSkills());
         response.put("researchInterests", user.getResearchInterests());
         
@@ -130,6 +137,24 @@ public class UserController {
         if (request.getYearOfStudy() != null) {
             user.setYearOfStudy(request.getYearOfStudy());
         }
+        if (request.getLevel() != null) {
+            user.setLevel(request.getLevel());
+        }
+        if (request.getStudyMode() != null) {
+            user.setStudyMode(request.getStudyMode());
+        }
+        if (request.getLocation() != null) {
+            user.setLocation(request.getLocation());
+        }
+        if (request.getNationality() != null) {
+            user.setNationality(request.getNationality());
+        }
+        if (request.getPreferredLocations() != null) {
+            user.setPreferredLocations(request.getPreferredLocations());
+        }
+        if (request.getPreferredFundingTypes() != null) {
+            user.setPreferredFundingTypes(request.getPreferredFundingTypes());
+        }
         if (request.getSkills() != null) {
             user.setSkills(request.getSkills());
         }
@@ -167,6 +192,12 @@ public class UserController {
         response.put("major", updatedUser.getMajor());
         response.put("university", updatedUser.getUniversity());
         response.put("yearOfStudy", updatedUser.getYearOfStudy());
+        response.put("level", updatedUser.getLevel());
+        response.put("studyMode", updatedUser.getStudyMode());
+        response.put("location", updatedUser.getLocation());
+        response.put("nationality", updatedUser.getNationality());
+        response.put("preferredLocations", updatedUser.getPreferredLocations());
+        response.put("preferredFundingTypes", updatedUser.getPreferredFundingTypes());
         response.put("skills", updatedUser.getSkills());
         response.put("researchInterests", updatedUser.getResearchInterests());
         
@@ -269,25 +300,7 @@ public class UserController {
      */
     private void publishUserProfileUpdatedEvent(User user) {
         try {
-            // Parse skills and research interests from comma-separated strings
-            java.util.List<String> skillsList = user.getSkills() != null && !user.getSkills().isEmpty()
-                    ? java.util.Arrays.asList(user.getSkills().split(","))
-                    : java.util.List.of();
-            
-            java.util.List<String> researchInterestsList = user.getResearchInterests() != null && !user.getResearchInterests().isEmpty()
-                    ? java.util.Arrays.asList(user.getResearchInterests().split(","))
-                    : java.util.List.of();
-            
-            Map<String, Object> eventPayload = Map.of(
-                    "userId", user.getId().toString(),
-                    "email", user.getEmail(),
-                    "gpa", user.getGpa() != null ? user.getGpa() : 0.0,
-                    "major", user.getMajor() != null ? user.getMajor() : "",
-                    "university", user.getUniversity() != null ? user.getUniversity() : "",
-                    "yearOfStudy", user.getYearOfStudy() != null ? user.getYearOfStudy() : 1,
-                    "skills", skillsList,
-                    "researchInterests", researchInterestsList
-            );
+            Map<String, Object> eventPayload = UserProfileEventPayloadFactory.fromUser(user);
 
             rabbitTemplate.convertAndSend(
                     "events_exchange",

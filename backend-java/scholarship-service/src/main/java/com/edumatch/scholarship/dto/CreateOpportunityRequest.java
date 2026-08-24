@@ -29,6 +29,9 @@ public class CreateOpportunityRequest {
     @PositiveOrZero(message = "Scholarship amount must be zero or positive")
     private BigDecimal scholarshipAmount;
 
+    @Size(max = 100)
+    private String fundingType;
+
     @DecimalMin(value = "0.0", message = "GPA must be at least 0.0")
     @DecimalMax(value = "4.0", message = "GPA must not exceed 4.0")
     private BigDecimal minGpa;
@@ -51,9 +54,19 @@ public class CreateOpportunityRequest {
     )
     private String website;
 
+    @Pattern(
+        regexp = "^(https?://.*)?$",
+        message = "Source URL must use https:// scheme (or be empty)"
+    )
+    private String sourceUrl;
+
     private List<String> tags;
 
     private List<String> requiredSkills;
+
+    private List<String> eligibleMajors;
+
+    private List<String> eligibleNationalities;
 
     /** Validate date relationships after bean validation */
     @AssertTrue(message = "Application deadline must be on or before start date")
