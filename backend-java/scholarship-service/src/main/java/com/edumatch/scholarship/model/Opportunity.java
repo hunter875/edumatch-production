@@ -50,6 +50,9 @@ public class Opportunity {
     @Column(name = "scholarship_amount", precision = 10, scale = 2)
     private BigDecimal scholarshipAmount;
 
+    @Column(name = "funding_type", length = 100)
+    private String fundingType;
+
     @Column(name = "min_gpa", precision = 3, scale = 2)
     private BigDecimal minGpa;
 
@@ -59,6 +62,9 @@ public class Opportunity {
 
     @Column(name = "website", length = 500)
     private String website;
+
+    @Column(name = "source_url", length = 1000)
+    private String sourceUrl;
     // --------------------------
 
     // --- THÔNG TIN ĐỊA ĐIỂM & TRƯỜNG HỌC ---
@@ -84,6 +90,12 @@ public class Opportunity {
 
     @Column(name = "is_public")
     private Boolean isPublic = false;
+
+    @Column(name = "eligible_majors", columnDefinition = "TEXT")
+    private String eligibleMajors;
+
+    @Column(name = "eligible_nationalities", columnDefinition = "TEXT")
+    private String eligibleNationalities;
     // ---------------------
 
     @Enumerated(EnumType.STRING)
