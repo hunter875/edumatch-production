@@ -299,6 +299,7 @@ jobs:
             SPRING_DATASOURCE_PASSWORD=secretref:auth-db-password
             APP_JWT_SECRET=secretref:jwt-secret
             APP_JWT_REQUIRE_RSA=true
+            APP_AUTH_COOKIE_SECURE=true
             APP_JWT_RSA_PRIVATE_KEY=secretref:jwt-private-key
             APP_JWT_RSA_PUBLIC_KEY=secretref:jwt-public-key
             RABBITMQ_HOST=secretref:rabbitmq-host
@@ -337,6 +338,7 @@ jobs:
               SPRING_DATASOURCE_PASSWORD=secretref:auth-db-password \
               APP_JWT_SECRET=secretref:jwt-secret \
               APP_JWT_REQUIRE_RSA=true \
+              APP_AUTH_COOKIE_SECURE=true \
               APP_JWT_RSA_PRIVATE_KEY=secretref:jwt-private-key \
               APP_JWT_RSA_PUBLIC_KEY=secretref:jwt-public-key \
               RABBITMQ_HOST=secretref:rabbitmq-host \
