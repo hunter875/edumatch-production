@@ -10,13 +10,118 @@ The target design:
 hard filter -> candidate retrieval -> rule score -> semantic score -> rerank -> cache -> explain
 ```
 
-For current phase, the practical target is:
+## EduMatch Matching Design v2
+
+Current implementation target:
+
+```txt
+hard eligibility filter -> TF-IDF retrieval -> structured weighted score -> diversity -> cache -> explain
+```
+
+This is an explainable rule-based hybrid, not an "AI-powered" black box. TF-IDF is a deterministic text-similarity component inside the same scoring model.
+
+Workers precompute recommendations asynchronously when applicant profiles or opportunities change. PostgreSQL remains the source of truth; Redis/API caches are acceleration only. RabbitMQ delivery is at-least-once, so consumers must be idempotent and use processed event IDs for deduplication.
+
+Applicant snapshot fields:
+
+```txt
+applicant_id
+major
+degree_level
+gpa
+skills
+research_interests
+preferred_locations
+preferred_funding_types
+nationality
+profile_version
+updated_at
+```
+
+Opportunity snapshot fields:
+
+```txt
+opportunity_id
+status
+deadline
+degree_levels
+eligible_majors
+min_gpa
+eligible_nationalities
+required_skills
+research_areas
+funding_type
+location
+description
+source_url
+last_verified_at
+version
+```
+
+Hard filters:
+
+- opportunity status is approved/active/published
+- deadline is not expired
+- applicant degree level is compatible when required
+- applicant GPA meets minimum when GPA is present
+- applicant nationality is eligible when nationality rules exist
+- applicant major is eligible when major is required
+- applicant has not already applied
+- deleted or blocked opportunities are excluded
+
+If a hard condition cannot be determined because profile data is missing, the result uses `eligibilityStatus = UNKNOWN` with `missingInformation`. The service must not silently assert eligibility. Target `constraint_violation_rate = 0`.
+
+Baseline v2 weights:
+
+```txt
+skill           0.30
+textSimilarity  0.25
+major           0.15
+interest        0.10
+funding         0.08
+location        0.05
+gpa             0.04
+freshness       0.03
+```
+
+The model version changes when weights or hard-filter semantics change. Current implementation version:
+
+```txt
+hybrid-v2.0
+```
+
+TF-IDF rules:
+
+- fit the vectorizer once on the active opportunity corpus
+- transform the applicant profile in that same vector space
+- do not fit applicant and opportunity text separately
+- fall back to rule-only ranking when the vectorizer is not ready
+
+Recommendation output includes:
+
+```txt
+rank
+score
+eligibilityStatus
+components
+reasons
+missingInformation
+sourceUrl
+lastVerifiedAt
+modelVersion
+profileVersion
+opportunityVersion
+```
+
+Recommendation cache rows store rank, eligibility status, component JSON, reasons JSON, missing-information JSON, model version, profile version, opportunity version, generated time, and expiry. Delivery reliability is documented as at-least-once, not exactly-once.
+
+Earlier implementation phases used this practical baseline:
 
 ```txt
 rule-based scoring + batch endpoint + DB cache + worker precompute
 ```
 
-Then add AI/embedding only when evaluation proves value.
+Add embeddings only when evaluation proves value beyond deterministic TF-IDF and rule scoring.
 
 ## Goals
 
@@ -580,4 +685,3 @@ Recommendation page:
 Short answer:
 
 > I used rule-based matching for hard constraints and explainability, then cached and precomputed recommendations to avoid full scans on request. AI is useful for semantic matching and explanation, but I would not call an LLM on every request because it is slow, expensive, and harder to make deterministic. The design uses workers and cache so the frontend reads fast top-N recommendations while the heavier matching pipeline runs asynchronously.
-

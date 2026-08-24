@@ -63,7 +63,18 @@ class RecommendationItem(BaseModel):
     """Single recommendation item"""
     opportunityId: Optional[str] = None
     applicantId: Optional[str] = None
+    rank: Optional[int] = Field(None, ge=1)
     matchingScore: float = Field(..., ge=0, le=100)
+    eligibilityStatus: Optional[str] = None
+    components: Optional[Dict[str, float]] = None
+    reasons: List[str] = Field(default_factory=list)
+    missingInformation: List[str] = Field(default_factory=list)
+    sourceUrl: Optional[str] = None
+    lastVerifiedAt: Optional[datetime] = None
+    modelVersion: Optional[str] = None
+    generatedAt: Optional[datetime] = None
+    profileVersion: Optional[str] = None
+    opportunityVersion: Optional[str] = None
 
 class RecommendationMetadata(BaseModel):
     """Metadata for recommendations"""
@@ -89,6 +100,9 @@ class UserProfileUpdatedEvent(BaseModel):
     level: Optional[str] = None
     studyMode: Optional[str] = None
     location: Optional[str] = None
+    nationality: Optional[str] = None
+    preferredLocations: Optional[List[str]] = None
+    preferredFundingTypes: Optional[List[str]] = None
     profileVersion: Optional[str] = None
     skills: Optional[List[str]] = []
     researchInterests: Optional[List[str]] = []
@@ -108,10 +122,16 @@ class ScholarshipCreatedEvent(BaseModel):
     level: Optional[str] = None
     studyMode: Optional[str] = None
     location: Optional[str] = None
+    fundingType: Optional[str] = None
+    providerId: Optional[str] = None
+    sourceUrl: Optional[str] = None
+    lastVerifiedAt: Optional[datetime] = None
     isPublic: Optional[bool] = None
     moderationStatus: Optional[str] = None
     requiredSkills: Optional[List[str]] = None
     preferredMajors: Optional[List[str]] = None
+    eligibleMajors: Optional[List[str]] = None
+    eligibleNationalities: Optional[List[str]] = None
     researchAreas: Optional[List[str]] = None
     opportunityVersion: Optional[str] = None
     
@@ -134,10 +154,16 @@ class ScholarshipCreatedEvent(BaseModel):
             self.level is not None,
             self.studyMode is not None,
             self.location is not None,
+            self.fundingType is not None,
+            self.providerId is not None,
+            self.sourceUrl is not None,
+            self.lastVerifiedAt is not None,
             self.isPublic is not None,
             self.moderationStatus is not None,
             self.requiredSkills is not None,
             self.preferredMajors is not None,
+            self.eligibleMajors is not None,
+            self.eligibleNationalities is not None,
             self.researchAreas is not None,
         ])
 
@@ -156,10 +182,16 @@ class ScholarshipUpdatedEvent(BaseModel):
     level: Optional[str] = None
     studyMode: Optional[str] = None
     location: Optional[str] = None
+    fundingType: Optional[str] = None
+    providerId: Optional[str] = None
+    sourceUrl: Optional[str] = None
+    lastVerifiedAt: Optional[datetime] = None
     isPublic: Optional[bool] = None
     moderationStatus: Optional[str] = None
     requiredSkills: Optional[List[str]] = None
     preferredMajors: Optional[List[str]] = None
+    eligibleMajors: Optional[List[str]] = None
+    eligibleNationalities: Optional[List[str]] = None
     researchAreas: Optional[List[str]] = None
     opportunityVersion: Optional[str] = None
     
@@ -182,10 +214,16 @@ class ScholarshipUpdatedEvent(BaseModel):
             self.level is not None,
             self.studyMode is not None,
             self.location is not None,
+            self.fundingType is not None,
+            self.providerId is not None,
+            self.sourceUrl is not None,
+            self.lastVerifiedAt is not None,
             self.isPublic is not None,
             self.moderationStatus is not None,
             self.requiredSkills is not None,
             self.preferredMajors is not None,
+            self.eligibleMajors is not None,
+            self.eligibleNationalities is not None,
             self.researchAreas is not None,
         ])
 
