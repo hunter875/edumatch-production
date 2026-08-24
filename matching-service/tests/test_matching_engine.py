@@ -67,6 +67,7 @@ def test_rule_score_includes_explainable_breakdown():
             "preferred_majors": ["Computer Science"],
             "required_skills": ["Python", "Machine Learning"],
             "research_areas": ["Artificial Intelligence"],
+            "tfidf_score": 0.8,
         },
     )
 
@@ -75,6 +76,8 @@ def test_rule_score_includes_explainable_breakdown():
     assert breakdown["skillsMatch"] > 75
     assert breakdown["majorMatch"] == 100.0
     assert breakdown["_hardFiltersPassed"] is True
+    assert breakdown["_eligibilityStatus"] == "ELIGIBLE"
+    assert breakdown["_components"]["textSimilarity"] == 0.8
     assert breakdown["_explanations"]
 
 
@@ -98,3 +101,123 @@ def test_study_mode_mismatch_is_hard_filtered_when_both_sides_are_explicit():
 
     assert score == 0.0
     assert "study_mode_mismatch" in breakdown["_constraintViolations"]
+
+
+def test_missing_required_profile_data_marks_eligibility_unknown_not_ineligible():
+    engine = MatchingEngine()
+
+    score, breakdown = engine.calculate_rule_based_score(
+        {
+            "major": "Computer Science",
+            "skills": ["Python", "Machine Learning"],
+            "research_interests": ["AI"],
+        },
+        {
+            "min_gpa": 3.4,
+            "preferred_majors": ["Computer Science"],
+            "required_skills": ["Python"],
+            "research_areas": ["AI"],
+            "tfidf_score": 0.7,
+        },
+    )
+
+    assert score > 0
+    assert breakdown["_hardFiltersPassed"] is True
+    assert breakdown["_constraintViolations"] == []
+    assert breakdown["_eligibilityStatus"] == "UNKNOWN"
+    assert "gpa" in breakdown["_missingInformation"]
+
+
+def test_hybrid_recommendations_fit_tfidf_on_opportunity_corpus_once():
+    engine = MatchingEngine()
+    applicant = {
+        "gpa": 3.9,
+        "major": "Computer Science",
+        "skills": ["Python", "Machine Learning"],
+        "research_interests": ["Natural Language Processing"],
+    }
+    opportunities = [
+        {
+            "id": "ai",
+            "title": "Applied AI Scholarship",
+            "description": "Machine learning and natural language processing research with Python.",
+            "min_gpa": 3.2,
+            "preferred_majors": ["Computer Science"],
+            "required_skills": ["Python", "Machine Learning"],
+            "research_areas": ["Natural Language Processing"],
+            "moderation_status": "APPROVED",
+        },
+        {
+            "id": "security",
+            "title": "Security Policy Scholarship",
+            "description": "Governance, compliance, and public policy research.",
+            "min_gpa": 3.2,
+            "preferred_majors": ["Public Policy"],
+            "required_skills": ["Writing"],
+            "research_areas": ["Compliance"],
+            "moderation_status": "APPROVED",
+        },
+    ]
+
+    results = engine.calculate_hybrid_recommendations(applicant, opportunities)
+
+    assert [item["candidate_id"] for item in results] == ["ai", "security"]
+    assert results[0]["components"]["textSimilarity"] > results[1]["components"]["textSimilarity"]
+    assert results[0]["model_version"] == "hybrid-v2.0"
+
+
+def test_hybrid_recommendations_are_deterministic_for_same_input():
+    engine = MatchingEngine()
+    applicant = {
+        "gpa": 3.8,
+        "major": "Computer Science",
+        "skills": ["Python", "Data Science"],
+        "research_interests": ["AI"],
+    }
+    opportunities = [
+        {
+            "id": "one",
+            "title": "AI Fellowship",
+            "description": "AI and data science",
+            "min_gpa": 3.0,
+            "preferred_majors": ["Computer Science"],
+            "required_skills": ["Python"],
+            "research_areas": ["AI"],
+            "moderation_status": "APPROVED",
+        },
+        {
+            "id": "two",
+            "title": "Data Fellowship",
+            "description": "Data science analytics",
+            "min_gpa": 3.0,
+            "preferred_majors": ["Computer Science"],
+            "required_skills": ["Data Science"],
+            "research_areas": ["AI"],
+            "moderation_status": "APPROVED",
+        },
+    ]
+
+    first = engine.calculate_hybrid_recommendations(applicant, opportunities)
+    second = engine.calculate_hybrid_recommendations(applicant, opportunities)
+
+    assert first == second
+
+
+def test_hybrid_recommendations_cap_provider_concentration_in_top_ten():
+    engine = MatchingEngine()
+    results = [
+        {"candidate_id": f"a-{index}", "score": 100 - index, "provider_id": "provider-a"}
+        for index in range(6)
+    ] + [
+        {"candidate_id": f"b-{index}", "score": 80 - index, "provider_id": f"provider-b-{index}"}
+        for index in range(8)
+    ]
+
+    diversified = engine._diversify_results(results)
+
+    top_ten_provider_a = [
+        item for item in diversified[:10]
+        if item["provider_id"] == "provider-a"
+    ]
+    assert len(top_ten_provider_a) == 3
+    assert len({item["candidate_id"] for item in diversified}) == len(diversified)

@@ -209,35 +209,64 @@ class MatchingService:
         applicant: models.ApplicantFeature,
         opportunity: models.OpportunityFeature,
     ) -> Tuple[float, Dict[str, Any]]:
+        return matching_engine.calculate_rule_based_score(
+            self._applicant_data(applicant),
+            self._opportunity_data(opportunity),
+        )
+
+    def _applicant_data(self, applicant: models.ApplicantFeature) -> Dict[str, Any]:
+        preferred_locations = list(getattr(applicant, "preferred_locations", None) or [])
+        if not preferred_locations and getattr(applicant, "location", None):
+            preferred_locations = [applicant.location]
+
         applicant_data = {
             "gpa": applicant.gpa,
             "major": applicant.major,
+            "degree_level": getattr(applicant, "level", None),
             "level": getattr(applicant, "level", None),
             "study_mode": getattr(applicant, "study_mode", None),
             "location": getattr(applicant, "location", None),
+            "nationality": getattr(applicant, "nationality", None),
+            "preferred_locations": preferred_locations,
+            "preferred_funding_types": list(getattr(applicant, "preferred_funding_types", None) or []),
             "skills": applicant.skills or [],
             "research_interests": applicant.research_interests or [],
+            "profile_version": self._feature_version(applicant, "profile_version"),
+            "updated_at": getattr(applicant, "updated_at", None),
         }
+        return applicant_data
 
+    def _opportunity_data(self, opportunity: models.OpportunityFeature) -> Dict[str, Any]:
         deadline_days = None
         if opportunity.application_deadline is not None:
             deadline_days = (opportunity.application_deadline - datetime.utcnow().date()).days
 
         opportunity_data = {
+            "id": str(opportunity.opportunity_id),
+            "opportunity_id": str(opportunity.opportunity_id),
+            "title": opportunity.title,
+            "description": opportunity.description,
             "min_gpa": opportunity.min_gpa,
             "scholarship_amount": opportunity.scholarship_amount,
             "deadline_days": deadline_days,
             "level": opportunity.level,
             "study_mode": opportunity.study_mode,
             "location": opportunity.location,
+            "funding_type": getattr(opportunity, "funding_type", None),
+            "provider_id": getattr(opportunity, "provider_id", None),
+            "source_url": getattr(opportunity, "source_url", None),
+            "last_verified_at": getattr(opportunity, "last_verified_at", None),
             "is_public": opportunity.is_public,
             "moderation_status": opportunity.moderation_status,
             "preferred_majors": opportunity.preferred_majors or [],
+            "eligible_majors": list(getattr(opportunity, "eligible_majors", None) or []),
+            "eligible_nationalities": list(getattr(opportunity, "eligible_nationalities", None) or []),
             "required_skills": opportunity.required_skills or [],
             "research_areas": opportunity.research_areas or [],
+            "opportunity_version": self._feature_version(opportunity, "opportunity_version"),
+            "updated_at": getattr(opportunity, "updated_at", None),
         }
-
-        return matching_engine.calculate_rule_based_score(applicant_data, opportunity_data)
+        return opportunity_data
 
     def _missing_feature_score(self, reason: str) -> schemas.ScoreResponse:
         return self._build_score_response(
@@ -517,24 +546,29 @@ class MatchingService:
         self,
         applicant: models.ApplicantFeature,
         opportunities: List[models.OpportunityFeature],
-    ) -> List[Tuple[str, float]]:
-        scored_results: List[Tuple[str, float]] = []
-        for opportunity in opportunities:
-            score, breakdown = self._calculate_score_from_features(applicant, opportunity)
-            if score <= 0:
+    ) -> List[Dict[str, Any]]:
+        opportunities_by_id = {str(opportunity.opportunity_id): opportunity for opportunity in opportunities}
+        opportunity_payloads = [self._opportunity_data(opportunity) for opportunity in opportunities]
+        scored_results = matching_engine.calculate_hybrid_recommendations(
+            self._applicant_data(applicant),
+            opportunity_payloads,
+        )
+
+        for result in scored_results:
+            opportunity = opportunities_by_id.get(str(result["candidate_id"]))
+            if opportunity is None:
                 continue
-            scored_results.append((str(opportunity.opportunity_id), round(float(score), 2)))
+            breakdown = result.get("breakdown") or {}
             self._upsert_score_cache(
                 str(applicant.applicant_id),
                 str(opportunity.opportunity_id),
-                score,
+                float(result["score"]),
                 breakdown,
                 commit=False,
                 profile_version=self._feature_version(applicant, "profile_version"),
                 opportunity_version=self._feature_version(opportunity, "opportunity_version"),
             )
 
-        scored_results.sort(key=lambda item: item[1], reverse=True)
         return scored_results
 
     def _score_applicants_for_opportunity(
@@ -566,7 +600,7 @@ class MatchingService:
         target_type: str,
         target_id: str,
         candidate_type: str,
-        scored_results: List[Tuple[str, float]],
+        scored_results: List[Any],
     ) -> None:
         try:
             self.db.query(models.RecommendationCache).filter(
@@ -576,14 +610,27 @@ class MatchingService:
 
             expires_at = datetime.utcnow() + timedelta(seconds=settings.RECOMMENDATION_CACHE_TTL)
             cache_version = f"{target_type}:{target_id}:{datetime.utcnow().isoformat()}"
-            for candidate_id, score in scored_results:
+            generated_at = datetime.utcnow()
+            for index, item in enumerate(scored_results, start=1):
+                recommendation = self._normalize_recommendation_result(item, index)
                 self.db.add(models.RecommendationCache(
                     target_type=target_type,
                     target_id=str(target_id),
                     candidate_type=candidate_type,
-                    candidate_id=str(candidate_id),
-                    matching_score=float(score),
-                    calculated_at=datetime.utcnow(),
+                    candidate_id=str(recommendation["candidate_id"]),
+                    rank=recommendation.get("rank") or index,
+                    matching_score=float(recommendation["score"]),
+                    eligibility_status=recommendation.get("eligibility_status"),
+                    components_json=recommendation.get("components"),
+                    reasons_json=recommendation.get("reasons"),
+                    missing_information_json=recommendation.get("missing_information"),
+                    source_url=recommendation.get("source_url"),
+                    last_verified_at=recommendation.get("last_verified_at"),
+                    model_version=recommendation.get("model_version"),
+                    profile_version=recommendation.get("profile_version"),
+                    opportunity_version=recommendation.get("opportunity_version"),
+                    generated_at=generated_at,
+                    calculated_at=generated_at,
                     expires_at=expires_at,
                     cache_version=cache_version,
                 ))
@@ -598,6 +645,42 @@ class MatchingService:
         except Exception as e:
             self.db.rollback()
             logger.error("Error replacing recommendation cache: %s", e, exc_info=True)
+
+    def _normalize_recommendation_result(self, item: Any, rank: int) -> Dict[str, Any]:
+        if isinstance(item, dict):
+            breakdown = item.get("breakdown") or {}
+            return {
+                "candidate_id": str(item.get("candidate_id")),
+                "score": round(float(item.get("score", 0.0)), 2),
+                "rank": item.get("rank") or rank,
+                "eligibility_status": item.get("eligibility_status") or breakdown.get("_eligibilityStatus"),
+                "components": item.get("components") or breakdown.get("_components"),
+                "reasons": item.get("reasons") or breakdown.get("_explanations") or [],
+                "missing_information": item.get("missing_information") or breakdown.get("_missingInformation") or [],
+                "source_url": item.get("source_url"),
+                "last_verified_at": item.get("last_verified_at"),
+                "model_version": item.get("model_version") or breakdown.get("_modelVersion"),
+                "profile_version": item.get("profile_version"),
+                "opportunity_version": item.get("opportunity_version"),
+                "generated_at": item.get("generated_at"),
+            }
+
+        candidate_id, score = item
+        return {
+            "candidate_id": str(candidate_id),
+            "score": round(float(score), 2),
+            "rank": rank,
+            "eligibility_status": None,
+            "components": None,
+            "reasons": [],
+            "missing_information": [],
+            "source_url": None,
+            "last_verified_at": None,
+            "model_version": matching_engine.rule_version,
+            "profile_version": None,
+            "opportunity_version": None,
+            "generated_at": None,
+        }
 
     def _get_cached_recommendations(
         self,
@@ -621,10 +704,28 @@ class MatchingService:
             return None
 
         rows = self.db.query(models.RecommendationCache).filter(*filters).order_by(
+            models.RecommendationCache.rank.asc().nulls_last(),
             models.RecommendationCache.matching_score.desc()
         ).offset((page - 1) * limit).limit(limit).all()
 
-        scored_results = [(row.candidate_id, row.matching_score) for row in rows]
+        scored_results = [
+            {
+                "candidate_id": row.candidate_id,
+                "score": row.matching_score,
+                "rank": row.rank or ((page - 1) * limit) + index,
+                "eligibility_status": row.eligibility_status,
+                "components": row.components_json,
+                "reasons": row.reasons_json or [],
+                "missing_information": row.missing_information_json or [],
+                "source_url": row.source_url,
+                "last_verified_at": row.last_verified_at,
+                "model_version": row.model_version,
+                "profile_version": row.profile_version,
+                "opportunity_version": row.opportunity_version,
+                "generated_at": row.generated_at,
+            }
+            for index, row in enumerate(rows, start=1)
+        ]
         return self._build_recommendation_page_response(target_type, scored_results, total, limit, page)
 
     def _get_recommendations_from_score_cache(
@@ -653,7 +754,10 @@ class MatchingService:
             rows = self.db.query(models.MatchingScore).filter(*filters).order_by(
                 models.MatchingScore.overall_score.desc()
             ).offset((page - 1) * limit).limit(limit).all()
-            scored_results = [(row.opportunity_id, row.overall_score) for row in rows]
+            scored_results = [
+                self._score_row_to_recommendation(row, row.opportunity_id, ((page - 1) * limit) + index)
+                for index, row in enumerate(rows, start=1)
+            ]
             return self._build_recommendation_page_response("applicant", scored_results, total, limit, page)
 
         filters = (
@@ -672,13 +776,39 @@ class MatchingService:
         rows = self.db.query(models.MatchingScore).filter(*filters).order_by(
             models.MatchingScore.overall_score.desc()
         ).offset((page - 1) * limit).limit(limit).all()
-        scored_results = [(row.applicant_id, row.overall_score) for row in rows]
+        scored_results = [
+            self._score_row_to_recommendation(row, row.applicant_id, ((page - 1) * limit) + index)
+            for index, row in enumerate(rows, start=1)
+        ]
         return self._build_recommendation_page_response("opportunity", scored_results, total, limit, page)
+
+    def _score_row_to_recommendation(
+        self,
+        row: models.MatchingScore,
+        candidate_id: str,
+        rank: int,
+    ) -> Dict[str, Any]:
+        breakdown = row.score_breakdown or {}
+        return {
+            "candidate_id": str(candidate_id),
+            "score": round(float(row.overall_score), 2),
+            "rank": rank,
+            "eligibility_status": breakdown.get("_eligibilityStatus"),
+            "components": breakdown.get("_components"),
+            "reasons": breakdown.get("_explanations") or [],
+            "missing_information": breakdown.get("_missingInformation") or [],
+            "source_url": None,
+            "last_verified_at": None,
+            "model_version": breakdown.get("_modelVersion") or breakdown.get("_algorithmVersion"),
+            "profile_version": row.profile_version,
+            "opportunity_version": row.opportunity_version,
+            "generated_at": row.calculated_at,
+        }
 
     def _build_recommendation_response(
         self,
         target_type: str,
-        scored_results: List[Tuple[str, float]],
+        scored_results: List[Any],
         limit: int,
         page: int,
     ) -> schemas.RecommendationResponse:
@@ -692,7 +822,7 @@ class MatchingService:
     def _build_recommendation_page_response(
         self,
         target_type: str,
-        paginated_results: List[Tuple[str, float]],
+        paginated_results: List[Any],
         total: int,
         limit: int,
         page: int,
@@ -701,13 +831,47 @@ class MatchingService:
 
         if target_type == "applicant":
             data = [
-                schemas.RecommendationItem(opportunityId=candidate_id, matchingScore=score)
-                for candidate_id, score in paginated_results
+                schemas.RecommendationItem(
+                    opportunityId=item["candidate_id"],
+                    matchingScore=item["score"],
+                    rank=item.get("rank"),
+                    eligibilityStatus=item.get("eligibility_status"),
+                    components=item.get("components"),
+                    reasons=item.get("reasons") or [],
+                    missingInformation=item.get("missing_information") or [],
+                    sourceUrl=item.get("source_url"),
+                    lastVerifiedAt=item.get("last_verified_at"),
+                    modelVersion=item.get("model_version"),
+                    generatedAt=item.get("generated_at"),
+                    profileVersion=item.get("profile_version"),
+                    opportunityVersion=item.get("opportunity_version"),
+                )
+                for item in [
+                    self._normalize_recommendation_result(result, ((page - 1) * limit) + index)
+                    for index, result in enumerate(paginated_results, start=1)
+                ]
             ]
         else:
             data = [
-                schemas.RecommendationItem(applicantId=candidate_id, matchingScore=score)
-                for candidate_id, score in paginated_results
+                schemas.RecommendationItem(
+                    applicantId=item["candidate_id"],
+                    matchingScore=item["score"],
+                    rank=item.get("rank"),
+                    eligibilityStatus=item.get("eligibility_status"),
+                    components=item.get("components"),
+                    reasons=item.get("reasons") or [],
+                    missingInformation=item.get("missing_information") or [],
+                    sourceUrl=item.get("source_url"),
+                    lastVerifiedAt=item.get("last_verified_at"),
+                    modelVersion=item.get("model_version"),
+                    generatedAt=item.get("generated_at"),
+                    profileVersion=item.get("profile_version"),
+                    opportunityVersion=item.get("opportunity_version"),
+                )
+                for item in [
+                    self._normalize_recommendation_result(result, ((page - 1) * limit) + index)
+                    for index, result in enumerate(paginated_results, start=1)
+                ]
             ]
 
         return schemas.RecommendationResponse(
