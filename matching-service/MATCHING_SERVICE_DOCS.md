@@ -8,8 +8,8 @@
 **Database**: PostgreSQL 15  
 **Message Queue**: RabbitMQ  
 **Background Worker**: RabbitMQ consumer
-**Cache**: Redis  
-**Purpose**: AI-powered matching giữa students và scholarships
+**Cache**: PostgreSQL read models/cache tables; Redis is optional acceleration elsewhere, not source of truth  
+**Purpose**: Deterministic, explainable hybrid matching using hard eligibility filtering, TF-IDF text retrieval, and structured weighted scoring
 
 ---
 
