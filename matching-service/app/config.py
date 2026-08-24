@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     RABBITMQ_PORT: int = 5672
     RABBITMQ_USER: str
     RABBITMQ_PASSWORD: str
+    EVENT_CLAIM_LEASE_SECONDS: int = 300
+    EVENT_RETRY_DELAYS_SECONDS: str = "5,30,120"
     
     # JWT Authentication (must match Auth Service settings)
     JWT_SECRET: str

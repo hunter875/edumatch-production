@@ -2,14 +2,16 @@
 RabbitMQ Event Consumer
 Listens to RabbitMQ queues and dispatches to matching event handlers.
 """
-import pika
 import json
 import logging
 import time
+from typing import Dict, List
+
+import pika
 from tenacity import retry, wait_fixed, stop_after_attempt, retry_if_exception_type
 
 from .config import settings
-from .event_dedup import claim_event, mark_event_processed, release_event_claim
+from .event_dedup import BUSY, CLAIMED, PROCESSED_DUPLICATE, claim_event, mark_event_processed, record_event_failure
 from .workers import (
     process_user_profile_updated,
     process_scholarship_created,
@@ -58,6 +60,7 @@ class RabbitMQConsumer:
         
         self.connection = pika.BlockingConnection(parameters)
         self.channel = self.connection.channel()
+        self.channel.confirm_delivery()
         
         logger.info("✅ Connected to RabbitMQ successfully")
     
@@ -74,6 +77,11 @@ class RabbitMQConsumer:
         # Dead Letter Exchange for failed messages
         self.channel.exchange_declare(
             exchange='events_dlx',
+            exchange_type='topic',
+            durable=True
+        )
+        self.channel.exchange_declare(
+            exchange='events_retry_exchange',
             exchange_type='topic',
             durable=True
         )
@@ -120,24 +128,90 @@ class RabbitMQConsumer:
                     queue=queue_name,
                     routing_key=routing_key,
                 )
+                for attempt, delay in enumerate(self._retry_delays(), start=1):
+                    retry_queue = f"{queue_name}.retry.{attempt}.{routing_key.replace('.', '_')}"
+                    retry_routing_key = self._retry_routing_key(routing_key, attempt)
+                    self.channel.queue_declare(
+                        queue=retry_queue,
+                        durable=True,
+                        arguments={
+                            'x-message-ttl': delay * 1000,
+                            'x-dead-letter-exchange': 'events_exchange',
+                            'x-dead-letter-routing-key': routing_key,
+                        },
+                    )
+                    self.channel.queue_bind(
+                        exchange='events_retry_exchange',
+                        queue=retry_queue,
+                        routing_key=retry_routing_key,
+                    )
 
             logger.info(
                 "Queue %s bound to %s (DLX → events_dlx)",
                 queue_name, config['routing_keys'],
             )
 
-        # Legacy test queue
-        self.channel.queue_declare(queue='test_queue', durable=True)
-        logger.info("Setup legacy test_queue for PoC compatibility")
-
     @staticmethod
     def _get_retry_count(properties: pika.BasicProperties) -> int:
-        """Extract retry count from x-death header, or 0."""
-        if properties.headers and 'x-death' in properties.headers:
-            death_info = properties.headers['x-death']
-            if death_info:
-                return int(death_info[0].get('count', 0))
+        """Extract explicit retry count, or 0 for first delivery."""
+        if properties.headers and 'x-edumatch-retry-attempt' in properties.headers:
+            return int(properties.headers.get('x-edumatch-retry-attempt') or 0)
         return 0
+
+    @staticmethod
+    def _retry_delays() -> List[int]:
+        return [
+            int(value.strip())
+            for value in settings.EVENT_RETRY_DELAYS_SECONDS.split(",")
+            if value.strip()
+        ]
+
+    @staticmethod
+    def _retry_routing_key(routing_key: str, attempt: int) -> str:
+        return f"retry.{attempt}.{routing_key}"
+
+    def _copy_properties_for_retry(self, properties: pika.BasicProperties, attempt: int) -> pika.BasicProperties:
+        headers: Dict = dict(properties.headers or {})
+        headers["x-edumatch-retry-attempt"] = attempt
+        return pika.BasicProperties(
+            content_type=properties.content_type or "application/json",
+            delivery_mode=2,
+            correlation_id=getattr(properties, "correlation_id", None),
+            message_id=getattr(properties, "message_id", None),
+            headers=headers,
+        )
+
+    def _publish_retry_or_dlq(self, ch, method, properties, body) -> None:
+        current_attempt = self._get_retry_count(properties)
+        next_attempt = current_attempt + 1
+        delays = self._retry_delays()
+        if next_attempt <= len(delays):
+            retry_routing_key = self._retry_routing_key(method.routing_key, next_attempt)
+            ch.basic_publish(
+                exchange="events_retry_exchange",
+                routing_key=retry_routing_key,
+                body=body,
+                properties=self._copy_properties_for_retry(properties, next_attempt),
+                mandatory=True,
+            )
+            logger.error(
+                "Scheduled retry attempt %s/%s for routing_key=%s delay=%ss",
+                next_attempt,
+                len(delays),
+                method.routing_key,
+                delays[next_attempt - 1],
+            )
+            return
+
+        dlq_properties = self._copy_properties_for_retry(properties, current_attempt)
+        ch.basic_publish(
+            exchange="events_dlx",
+            routing_key=method.routing_key,
+            body=body,
+            properties=dlq_properties,
+            mandatory=True,
+        )
+        logger.error("Published message to DLQ routing_key=%s after %s retries", method.routing_key, current_attempt)
     
     def callback(self, ch, method, properties, body):
         """Handle incoming messages"""
@@ -165,14 +239,26 @@ class RabbitMQConsumer:
             handler = self.event_handlers.get(routing_key)
             
             if handler:
-                if event_id and not claim_event(str(event_id), routing_key):
+                if event_id:
+                    claim_status = claim_event(str(event_id), routing_key)
+                else:
+                    claim_status = CLAIMED
+
+                if claim_status == PROCESSED_DUPLICATE:
                     ch.basic_ack(delivery_tag=method.delivery_tag)
                     return
+                if claim_status == BUSY:
+                    self._publish_retry_or_dlq(ch, method, properties, body)
+                    ch.basic_ack(delivery_tag=method.delivery_tag)
+                    return
+
                 try:
-                    result = handler(message)
+                    handler(message)
                     logger.info(f"✅ Executed handler for routing_key: {routing_key}")
                 except Exception as task_error:
                     logger.error(f"❌ Task execution failed: {task_error}", exc_info=True)
+                    if event_id:
+                        record_event_failure(str(event_id), task_error)
                     raise  # Re-raise to trigger nack and requeue
                 if event_id:
                     mark_event_processed(str(event_id))
@@ -188,35 +274,16 @@ class RabbitMQConsumer:
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
             
         except Exception as e:
-            if event_id:
-                release_event_claim(str(event_id))
             retry_count = self._get_retry_count(properties)
             logger.error(
-                "Error processing message (retry %s/3): %s", retry_count, e, exc_info=True,
+                "Error processing message (retry %s/%s): %s", retry_count, len(self._retry_delays()), e, exc_info=True,
             )
-            if retry_count >= 3:
-                # Max retries reached → dead-letter (no requeue)
-                logger.error(
-                    "Moving message to DLQ after %s retries, routing_key=%s",
-                    retry_count, method.routing_key,
-                )
+            try:
+                self._publish_retry_or_dlq(ch, method, properties, body)
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+            except Exception as publish_error:
+                logger.error("Could not schedule retry/DLQ, nacking original: %s", publish_error, exc_info=True)
                 ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-            else:
-                # Requeue with delay via DLX (message will be dead-lettered back)
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
-    
-    def legacy_callback(self, ch, method, properties, body):
-        """Handle legacy test_queue messages (PoC 3 compatibility)"""
-        try:
-            data = json.loads(body.decode('utf-8'))
-            logger.info(f"[PoC 3] MATCHING-SERVICE: Received ASYNC message! Data: {data}")
-            
-            # Acknowledge message
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-            
-        except Exception as e:
-            logger.error(f"[PoC 3] Error processing legacy message: {e}")
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
     
     def start_consuming(self):
         """Start consuming messages"""
@@ -233,12 +300,6 @@ class RabbitMQConsumer:
         self.channel.basic_consume(
             queue='scholarship_events_queue',
             on_message_callback=self.callback
-        )
-        
-        # Legacy consumer for PoC 3
-        self.channel.basic_consume(
-            queue='test_queue',
-            on_message_callback=self.legacy_callback
         )
         
         logger.info("👂 Listening for messages...")
