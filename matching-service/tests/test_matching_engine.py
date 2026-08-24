@@ -1,4 +1,8 @@
-from app.matching import MatchingEngine
+from app.matching import HYBRID_V2_WEIGHTS, MatchingEngine
+
+
+def test_hybrid_v2_weights_sum_to_one():
+    assert sum(HYBRID_V2_WEIGHTS.values()) == 1.0
 
 
 def test_gpa_hard_filter_zeroes_ineligible_candidate():
@@ -221,3 +225,73 @@ def test_hybrid_recommendations_cap_provider_concentration_in_top_ten():
     ]
     assert len(top_ten_provider_a) == 3
     assert len({item["candidate_id"] for item in diversified}) == len(diversified)
+
+
+def test_ineligible_text_matches_cannot_crowd_out_eligible_candidate():
+    engine = MatchingEngine()
+    applicant = {
+        "gpa": 3.8,
+        "major": "Computer Science",
+        "skills": ["Python", "Machine Learning"],
+        "research_interests": ["AI"],
+    }
+    opportunities = [
+        {
+            "id": f"ineligible-{index}",
+            "title": "Perfect AI Python Machine Learning Scholarship",
+            "description": "Python machine learning AI research scholarship",
+            "min_gpa": 4.0,
+            "preferred_majors": ["Computer Science"],
+            "required_skills": ["Python", "Machine Learning"],
+            "research_areas": ["AI"],
+            "moderation_status": "APPROVED",
+        }
+        for index in range(200)
+    ]
+    opportunities.append({
+        "id": "eligible-low-text",
+        "title": "General STEM award",
+        "description": "Broad academic funding",
+        "min_gpa": 3.0,
+        "preferred_majors": ["Computer Science"],
+        "required_skills": ["Python"],
+        "research_areas": ["Education"],
+        "moderation_status": "APPROVED",
+    })
+
+    results = engine.calculate_hybrid_recommendations(applicant, opportunities, retrieval_limit=200)
+
+    assert [item["candidate_id"] for item in results] == ["eligible-low-text"]
+    assert results[0]["eligibility_status"] == "ELIGIBLE"
+
+
+def test_unknown_recommendations_sort_after_eligible_and_explain_missing_data():
+    engine = MatchingEngine()
+    applicant = {
+        "major": "Computer Science",
+        "skills": ["Python"],
+    }
+    opportunities = [
+        {
+            "id": "unknown",
+            "title": "Python scholarship",
+            "description": "Python",
+            "min_gpa": 3.0,
+            "required_skills": ["Python"],
+            "moderation_status": "APPROVED",
+        },
+        {
+            "id": "eligible",
+            "title": "General award",
+            "description": "General",
+            "required_skills": [],
+            "moderation_status": "APPROVED",
+        },
+    ]
+
+    results = engine.calculate_hybrid_recommendations(applicant, opportunities)
+
+    assert [item["candidate_id"] for item in results] == ["eligible", "unknown"]
+    assert results[1]["eligibility_status"] == "UNKNOWN"
+    assert "gpa" in results[1]["missing_information"]
+    assert any("missing applicant field: gpa" in reason for reason in results[1]["reasons"])
