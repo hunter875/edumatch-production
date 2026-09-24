@@ -1,0 +1,34 @@
+name: AWS OIDC proof
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prove-build-identity:
+    runs-on: ubuntu-latest
+    environment: aws-staging-build
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c
+        with:
+          role-to-assume: ${{ vars.AWS_BUILD_ROLE_ARN }}
+          aws-region: ap-southeast-1
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+      - name: Verify bound identity
+        env:
+          EXPECTED_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          actual_account="$(aws sts get-caller-identity --query Account --output text)"
+          actual_arn="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$actual_account" = "$EXPECTED_ACCOUNT"
+          case "$actual_arn" in
+            arn:aws:sts::"$EXPECTED_ACCOUNT":assumed-role/edumatch-staging-build/*) ;;
+            *) echo "Unexpected caller identity" >&2; exit 1 ;;
+          esac
+          echo "OIDC identity is bound to the expected account and role."
