@@ -76,6 +76,11 @@ public class SecurityConfig {
                                 .requestMatchers("/api/auth/refresh").permitAll()
                                 .requestMatchers("/api/auth/logout").permitAll()
                                 .requestMatchers("/api/auth/health").permitAll()
+                                // Client-credentials exchange: reachable without a user
+                                // session by design. The service validates the client id
+                                // and secret itself and is disabled unless explicitly
+                                // enabled with a sufficiently long secret.
+                                .requestMatchers("/api/service/token").permitAll()
                                 .requestMatchers("/api/public/**").permitAll()
                                 .requestMatchers("/actuator/health").permitAll()
                                 .requestMatchers("/uploads/**").permitAll()

@@ -29,6 +29,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -49,6 +50,7 @@ public class ChatService {
     private final NotificationRepository notificationRepository;
     private final FirebaseMessagingService firebaseMessagingService;
     private final RestTemplate restTemplate;
+    private final ServiceTokenClient serviceTokenClient;
 
     @Value("${app.services.auth-service.url:http://auth-service:8081}") // Lấy URL từ properties
     private String authServiceUrl;
@@ -141,13 +143,22 @@ public class ChatService {
             return Map.of();
         }
 
+        // Resolving OTHER users cannot use /api/user/me: the caller is asking about
+        // someone else, so it needs a service identity. /api/internal/users is
+        // guarded by ROLE_ADMIN/ROLE_SERVICE, which a user token never carries.
+        String serviceToken = serviceTokenClient.getToken();
+        if (serviceToken == null) {
+            throw new IllegalStateException(
+                    "Cannot resolve user details: no service token is available for the internal lookup.");
+        }
+
         String url = UriComponentsBuilder
                 .fromHttpUrl(authServiceUrl + "/api/internal/users")
                 .queryParam("ids", userIds.toArray())
                 .toUriString();
 
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + token);
+        headers.set("Authorization", "Bearer " + serviceToken);
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {
@@ -168,6 +179,11 @@ public class ChatService {
                             user -> user,
                             (first, ignored) -> first
                     ));
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden ex) {
+            // The cached token was refused; drop it so the next call re-exchanges.
+            serviceTokenClient.invalidate();
+            log.error("Auth-Service rejected the service token for batch lookup: {}", ex.getStatusCode());
+            throw new IllegalStateException("Auth-Service rejected the service identity for batch lookup.");
         } catch (Exception ex) {
             log.error("Loi khi goi Auth-Service batch user lookup: {}", ex.getMessage());
             return Map.of();
@@ -333,14 +349,23 @@ public class ChatService {
     }
 
     /**
-     * Lấy thông tin user bằng ID từ Auth-Service
+     * Lấy thông tin user bằng ID từ Auth-Service.
+     *
+     * <p>Looks up a user other than the caller, so it needs a service identity:
+     * {@code /api/internal/user/id/{id}} is guarded by ROLE_ADMIN/ROLE_SERVICE and a
+     * forwarded user token can never satisfy that guard.
      */
     private UserDetailDto getUserDetailsByIdFromAuthService(Long userId, String token) {
+        String serviceToken = serviceTokenClient.getToken();
+        if (serviceToken == null) {
+            log.error("No service token available; cannot resolve user id {}", userId);
+            return null;
+        }
         String url = authServiceUrl + "/api/internal/user/id/" + userId;
-        log.info("ChatService: Calling Auth-Service to get user details for userId: {}", userId);
+        log.debug("ChatService: resolving user id {} via service identity", userId);
 
         HttpHeaders headers = new HttpHeaders();
-        headers.set("Authorization", "Bearer " + token);
+        headers.set("Authorization", "Bearer " + serviceToken);
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         try {
@@ -362,10 +387,16 @@ public class ChatService {
 
     /**
      * Hàm helper gọi sang Auth-Service để lấy UserID (Long) từ Username (String).
+     *
+     * <p>Uses the self endpoint {@code /api/user/me}, which resolves the principal
+     * from the caller's own token inside auth-service. The previous implementation
+     * posted the user token to {@code /api/internal/user/{username}}, an endpoint
+     * guarded by ROLE_ADMIN/ROLE_SERVICE — roles an ordinary user never holds, so
+     * the call could only ever return 403.
      */
     private UserDetailDto getUserDetailsFromAuthService(String username, String token) {
-        String url = authServiceUrl + "/api/internal/user/" + username;
-        log.info("ChatService: Calling Auth-Service to get user details for: {}", username);
+        String url = authServiceUrl + "/api/user/me";
+        log.debug("ChatService: resolving current user via Auth-Service self endpoint");
 
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", "Bearer " + token);
@@ -379,8 +410,10 @@ public class ChatService {
             if (user == null || user.getId() == null) {
                 throw new IllegalStateException("Cannot resolve user details from Auth-Service.");
             }
-            log.info("ChatService: Successfully received user details, userId={}", user.getId());
             return user;
+        } catch (HttpClientErrorException.Unauthorized | HttpClientErrorException.Forbidden ex) {
+            log.error("Auth-Service rejected the caller token at the self endpoint: {}", ex.getStatusCode());
+            throw new IllegalStateException("The presented token is not valid for the Auth-Service self endpoint.");
         } catch (Exception ex) {
             log.error("Lỗi khi gọi Auth-Service: {}", ex.getMessage());
             throw new IllegalStateException("Không thể kết nối hoặc xác thực với Auth-Service.");

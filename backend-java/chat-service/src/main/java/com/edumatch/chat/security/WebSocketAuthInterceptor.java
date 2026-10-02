@@ -118,8 +118,16 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         throw new AccessDeniedException("WebSocket session is not authenticated.");
     }
 
+    /**
+     * Resolve the connecting user's id from their own token.
+     *
+     * <p>Uses the auth-service self endpoint, which reads the principal from the
+     * presented token. The previous target, {@code /api/internal/user/{username}},
+     * is guarded by ROLE_ADMIN/ROLE_SERVICE, so a user token was always rejected
+     * with 403 and the WebSocket handshake could never establish an identity.
+     */
     private Long resolveUserId(String username, String token) {
-        String url = authServiceUrl + "/api/internal/user/" + username;
+        String url = authServiceUrl + "/api/user/me";
         HttpHeaders headers = new HttpHeaders();
         headers.set("Authorization", headerPrefix + " " + token);
 
