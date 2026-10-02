@@ -7,14 +7,29 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public final class UserProfileEventPayloadFactory {
+
+    /** Field the consumer reads to claim an event for exactly-once processing. */
+    public static final String EVENT_ID_FIELD = "event_id";
 
     private UserProfileEventPayloadFactory() {
     }
 
+    /**
+     * Build the user.profile.updated payload.
+     *
+     * <p>The consumer claims each delivery in a {@code processed_events} ledger
+     * keyed on {@code event_id}; without that field it skips the claim entirely
+     * and duplicate deliveries are processed again. Every event therefore carries
+     * a fresh identifier. A retry of the same logical event must reuse the id, so
+     * callers that retry should serialise and re-send this same payload rather
+     * than rebuilding it.
+     */
     public static Map<String, Object> fromUser(User user) {
         Map<String, Object> payload = new HashMap<>();
+        payload.put(EVENT_ID_FIELD, UUID.randomUUID().toString());
         payload.put("userId", user.getId().toString());
         payload.put("email", user.getEmail());
         payload.put("gpa", user.getGpa());
