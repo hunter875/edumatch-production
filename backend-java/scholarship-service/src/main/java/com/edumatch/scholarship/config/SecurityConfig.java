@@ -4,6 +4,7 @@ import com.edumatch.scholarship.security.JwtAccessDeniedHandler;
 import com.edumatch.scholarship.security.JwtAuthenticationEntryPoint;
 import com.edumatch.scholarship.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -26,6 +27,10 @@ public class SecurityConfig {
     private final JwtAccessDeniedHandler accessDeniedHandler;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    /** Comma-separated extra browser origins, supplied per deployment. */
+    @Value("${app.cors.allowed-origin-patterns:}")
+    private String extraAllowedOriginPatterns;
+
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 
@@ -38,6 +43,19 @@ public class SecurityConfig {
                     config.addAllowedOriginPattern("http://localhost:*");
                     config.addAllowedOriginPattern("http://127.0.0.1:*");
                     config.addAllowedOriginPattern("https://*.azurecontainerapps.io");
+                    // Deployment-supplied origins. A browser request carrying an
+                    // Origin absent from this list is rejected with
+                    // "Invalid CORS request" before the controller runs, so the
+                    // public staging origin must be configurable rather than
+                    // hardcoded per environment.
+                    if (extraAllowedOriginPatterns != null && !extraAllowedOriginPatterns.isBlank()) {
+                        for (String pattern : extraAllowedOriginPatterns.split(",")) {
+                            String trimmed = pattern.trim();
+                            if (!trimmed.isEmpty()) {
+                                config.addAllowedOriginPattern(trimmed);
+                            }
+                        }
+                    }
                     config.addAllowedMethod("*");
                     config.addAllowedHeader("*");
                     config.setAllowCredentials(true);
