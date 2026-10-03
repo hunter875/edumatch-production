@@ -20,11 +20,16 @@ public interface OpportunityRepository extends JpaRepository<Opportunity, Long>,
 
      List<Opportunity> findByCreatorUserId(Long creatorUserId);
      List<Opportunity> findByOrganizationId(Long organizationId);
-     Page<Opportunity> findByModerationStatus(String status, Pageable pageable);
-     long countByModerationStatus(String status);
+     // The moderationStatus property is a ModerationStatus enum, so the derived
+     // query parameter must be that enum. Declaring it as String made Spring Data
+     // hand a String to a typed parameter and fail at runtime with
+     // "Argument [APPROVED] of type [java.lang.String] did not match parameter
+     // type [ModerationStatus]".
+     Page<Opportunity> findByModerationStatus(com.edumatch.scholarship.model.ModerationStatus status, Pageable pageable);
+     long countByModerationStatus(com.edumatch.scholarship.model.ModerationStatus status);
      long countByApplicationDeadlineBefore(LocalDate date);
      long countByCreatorUserId(Long creatorUserId);
-     long countByCreatorUserIdAndModerationStatus(Long creatorUserId, String status);
+     long countByCreatorUserIdAndModerationStatus(Long creatorUserId, com.edumatch.scholarship.model.ModerationStatus status);
      List<Opportunity> findTop5ByCreatorUserIdAndApplicationDeadlineGreaterThanEqualOrderByApplicationDeadlineAsc(Long creatorUserId, LocalDate date);
 
      @Query("""
