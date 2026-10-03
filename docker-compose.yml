@@ -95,6 +95,11 @@ services:
       - SPRING_DATASOURCE_USERNAME=auth_user
       - SPRING_DATASOURCE_PASSWORD=${AUTH_DB_PASSWORD:?Set AUTH_DB_PASSWORD in .env}
       - APP_JWT_SECRET=${EDUMATCH_JWT_SECRET:?Set EDUMATCH_JWT_SECRET in .env}
+      # Client-credentials exchange used by other services for /api/internal/**.
+      # Disabled by default; local development leaves it off.
+      - APP_SERVICE_AUTH_ENABLED=${APP_SERVICE_AUTH_ENABLED:-false}
+      - APP_SERVICE_AUTH_CLIENT_ID=${APP_SERVICE_AUTH_CLIENT_ID:-}
+      - APP_SERVICE_AUTH_CLIENT_SECRET=${APP_SERVICE_AUTH_CLIENT_SECRET:-}
       - APP_JWT_EXPIRATION=900000
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672
@@ -405,6 +410,13 @@ services:
       - SPRING_DATASOURCE_PASSWORD=${CHAT_DB_PASSWORD:?Set CHAT_DB_PASSWORD in .env}
       - APP_JWT_SECRET=${EDUMATCH_JWT_SECRET:?Set EDUMATCH_JWT_SECRET in .env}
       - JWT_SECRET=${EDUMATCH_JWT_SECRET:?Set EDUMATCH_JWT_SECRET in .env}
+      # The application default is the in-network name used in deployment. On this
+      # local Compose network the auth container is auth-service-test, so the URL
+      # is set explicitly here instead of relying on the application default.
+      - AUTH_SERVICE_URL=http://auth-service-test:8081
+      - APP_SERVICE_AUTH_ENABLED=${APP_SERVICE_AUTH_ENABLED:-false}
+      - APP_SERVICE_AUTH_CLIENT_ID=${APP_SERVICE_AUTH_CLIENT_ID:-}
+      - APP_SERVICE_AUTH_CLIENT_SECRET=${APP_SERVICE_AUTH_CLIENT_SECRET:-}
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672
       - RABBITMQ_USERNAME=${RABBITMQ_USERNAME:?Set RABBITMQ_USERNAME in .env}

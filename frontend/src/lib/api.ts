@@ -14,6 +14,7 @@ import {
   Conversation
 } from '@/types';
 import { API_PREFIX } from '@/lib/api-config';
+import { tokenStore } from '@/lib/tokenStore';
 
 // API Configuration
 // Use relative path for production (works with nginx proxy)
@@ -28,16 +29,14 @@ const defaultOptions: RequestInit = {
   credentials: 'include', // Include cookies for authentication
 };
 
-// Helper function to get auth token from in-memory store only
+// Helper function to get auth token from the in-memory store only.
+//
+// `require` does not exist in the client bundle's ESM scope, so the previous
+// version always threw and returned null: no request from this module ever
+// carried a bearer token. Static import lets the bundler resolve it.
 const getAuthToken = (): string | null => {
   if (typeof window === 'undefined') return null;
-  try {
-    const { getAccessToken } = require('@/services/auth.service');
-    const memToken = getAccessToken();
-    if (memToken) return memToken;
-  } catch (_) { /* module not available */ }
-  // No localStorage fallback — bearer tokens are in memory only
-  return null;
+  return tokenStore.getAccessToken();
 };
 
 // Helper function to create authenticated headers
@@ -57,10 +56,19 @@ const getAuthHeaders = (): HeadersInit => {
 // Generic API call function with timeout, FormData support, and standardized errors
 const DEFAULT_TIMEOUT_MS = 15000;
 
+/**
+ * Perform a request and return the parsed response body.
+ *
+ * The return type is T, not ApiResponse<T>: this function returns the backend
+ * body verbatim (the `return data;` below) and does not wrap it. The previous
+ * annotation claimed an envelope that was never produced, so callers wrote
+ * `result.data.x` against a value that had no `data` property and always read
+ * undefined.
+ */
 async function apiCall<T = any>(
   endpoint: string,
   options: RequestInit = {}
-): Promise<ApiResponse<T>> {
+): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
 
   // Detect FormData body — must NOT set Content-Type so browser can add multipart boundary
@@ -125,17 +133,22 @@ export class ApiError extends Error {
 }
 
 // Auth API
+//
+// The declared response types mirror the backend contract: /api/auth/login and
+// /api/auth/register answer { accessToken, tokenType }. An earlier declaration
+// promised { user, token }, which never matched and let callers read fields that
+// could not exist.
 export const authApi = {
   // Login user
   login: (credentials: LoginForm) =>
-    apiCall<{ user: UserProfile; token: string }>('/auth/login', {
+    apiCall<{ accessToken: string; tokenType: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     }),
 
   // Register user
   register: (userData: SignupForm) =>
-    apiCall<{ user: UserProfile; token: string }>('/auth/register', {
+    apiCall<{ accessToken: string; tokenType: string }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     }),
@@ -173,19 +186,25 @@ export const authApi = {
 };
 
 // Users API
+//
+// The only self endpoints the backend exposes are GET/PUT /api/user/me. The
+// previous paths here (/users/profile, /users/account, /users/{id}) had no
+// handler, so every profile read and write answered 500 from the resource
+// handler fallback.
 export const usersApi = {
-  // Get user profile
-  getProfile: (userId?: string) =>
-    apiCall<UserProfile>(userId ? `/users/${userId}` : '/users/profile'),
+  // Get the authenticated user's own record. `userId` is accepted for callers
+  // that still pass it, but the backend resolves identity from the token.
+  getProfile: (_userId?: string) =>
+    apiCall<UserProfile>('/user/me'),
 
-  // Update user profile
+  // Update the authenticated user's own record
   updateProfile: (profileData: Partial<ProfileForm>) =>
-    apiCall<UserProfile>('/users/profile', {
+    apiCall<UserProfile>('/user/me', {
       method: 'PUT',
       body: JSON.stringify(profileData),
     }),
 
-  // Upload avatar
+  // Upload avatar. The backend exposes this at /api/users/avatar.
   uploadAvatar: (file: File) => {
     const formData = new FormData();
     formData.append('avatar', file);
@@ -197,11 +216,14 @@ export const usersApi = {
     });
   },
 
-  // Delete account
-  deleteAccount: () =>
-    apiCall('/users/account', {
-      method: 'DELETE',
-    }),
+  // Delete account.
+  //
+  // The backend has no self-deletion endpoint: /api/users/account was never
+  // implemented. Admin deletion exists as DELETE /api/admin/users/{id}. Rather
+  // than call a path that does not exist and surface a 500, this states the gap.
+  deleteAccount: async (): Promise<never> => {
+    throw new Error('Account deletion is not available: the backend exposes no self-deletion endpoint.');
+  },
 };
 
 // Scholarships API
@@ -343,26 +365,29 @@ export const applicationsApi = {
 // Notifications API
 export const notificationsApi = {
   // Get notifications
-  getNotifications: (page = 1, limit = 20) =>
-    apiCall<PaginatedResponse<Notification>>(`/notifications?page=${page}&limit=${limit}`),
+  getNotifications: (page = 0, limit = 20) =>
+    apiCall<PaginatedResponse<Notification>>(`/notifications?page=${page}&size=${limit}`),
 
-  // Mark notification as read
+  // Mark notification as read.
+  // The backend maps this as PATCH /api/notifications/{id}/read and answers 204;
+  // the previous call used PUT against a path with no handler.
   markAsRead: (id: string) =>
     apiCall(`/notifications/${id}/read`, {
-      method: 'PUT',
+      method: 'PATCH',
     }),
 
   // Mark all notifications as read
   markAllAsRead: () =>
     apiCall('/notifications/read-all', {
-      method: 'PUT',
+      method: 'POST',
     }),
 
-  // Delete notification
-  deleteNotification: (id: string) =>
-    apiCall(`/notifications/${id}`, {
-      method: 'DELETE',
-    }),
+  // Delete notification.
+  // The backend exposes no delete endpoint for notifications, so this reports the
+  // gap instead of calling a path that does not exist.
+  deleteNotification: async (_id: string): Promise<never> => {
+    throw new Error('Deleting a notification is not available: the backend exposes no such endpoint.');
+  },
 
   // Get unread count
   getUnreadCount: () =>

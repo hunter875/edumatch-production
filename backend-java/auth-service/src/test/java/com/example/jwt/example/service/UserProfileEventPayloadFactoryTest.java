@@ -43,4 +43,29 @@ class UserProfileEventPayloadFactoryTest {
         assertThat(payload.get("researchInterests")).asList().containsExactly("NLP", "Retrieval");
         assertThat(payload).containsEntry("profileVersion", "2026-08-24T12:30");
     }
+
+    @Test
+    void everyEventCarriesADistinctEventId() {
+        User user = User.builder().id(7L).email("a@example.com").build();
+
+        Map<String, Object> first = UserProfileEventPayloadFactory.fromUser(user);
+        Map<String, Object> second = UserProfileEventPayloadFactory.fromUser(user);
+
+        // The consumer keys its processed_events ledger on event_id. Without the
+        // field it skips the claim and duplicate deliveries are reprocessed.
+        assertThat(first).containsKey("event_id");
+        assertThat(first.get("event_id")).isInstanceOf(String.class);
+        assertThat((String) first.get("event_id")).isNotBlank();
+        assertThat(first.get("event_id")).isNotEqualTo(second.get("event_id"));
+    }
+
+    @Test
+    void eventIdParsesAsUuid() {
+        User user = User.builder().id(8L).email("b@example.com").build();
+
+        String eventId = (String) UserProfileEventPayloadFactory.fromUser(user).get("event_id");
+
+        // A malformed id would still be stored, so assert the shape explicitly.
+        assertThat(java.util.UUID.fromString(eventId)).hasToString(eventId);
+    }
 }

@@ -187,6 +187,51 @@ public class JwtTokenProvider {
         return parseClaims(token).getSubject();
     }
 
+    /**
+     * Create a short-lived machine-to-machine token carrying {@code ROLE_SERVICE}.
+     *
+     * <p>The token reuses the standard signing path, so verification of signature,
+     * expiry, issuer and audience is identical to user tokens. It deliberately
+     * omits {@code userId}: a service principal is not a user, and downstream
+     * lookups that need a numeric user id must still supply one explicitly.
+     *
+     * @param serviceName client identity, used as the subject
+     * @param tokenAudience audience the resource server expects; defaults to the
+     *                      configured API audience so the existing validator accepts it
+     * @param ttlSeconds    lifetime; clamped to a small upper bound
+     */
+    public String createServiceToken(String serviceName, String tokenAudience, long ttlSeconds) {
+        if (serviceName == null || serviceName.isBlank()) {
+            throw new IllegalArgumentException("Service name must not be blank");
+        }
+        if (signingKey == null) {
+            throw new IllegalStateException("Signing key is not initialised");
+        }
+        // A service token must never outlive a user session by much; cap it so a
+        // misconfiguration cannot mint a long-lived machine credential.
+        long effectiveTtl = Math.max(30, Math.min(ttlSeconds, 3600));
+        String effectiveAudience = (tokenAudience == null || tokenAudience.isBlank()) ? audience : tokenAudience;
+
+        return baseClaims(serviceName)
+                .claim("aud", effectiveAudience)
+                .claim("roles", "ROLE_SERVICE")
+                .claim("typ", "access")
+                .expiration(new Date(System.currentTimeMillis() + effectiveTtl * 1000))
+                .signWith(signingKey, signatureAlgorithm)
+                .compact();
+    }
+
+    /** True when the token verifies under the same rules as a user access token. */
+    public boolean isValidServiceToken(String token) {
+        if (!validateToken(token)) {
+            return false;
+        }
+        Object roles = parseClaims(token).get("roles");
+        return roles != null && Arrays.stream(roles.toString().split(","))
+                .map(String::trim)
+                .anyMatch("ROLE_SERVICE"::equals);
+    }
+
     public Authentication getAuthentication(String token) {
         Claims claims = parseClaims(token);
 

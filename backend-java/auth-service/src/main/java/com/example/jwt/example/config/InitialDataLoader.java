@@ -44,6 +44,11 @@ public class InitialDataLoader implements CommandLineRunner {
         createRoleIfNotFound("ROLE_USER", "Regular user role");
         createRoleIfNotFound("ROLE_EMPLOYER", "Employer role");
         createRoleIfNotFound("ROLE_ADMIN", "Administrator role");
+        // Service-to-service role. Several /api/internal/** endpoints are guarded
+        // with hasAnyAuthority('ROLE_ADMIN','ROLE_SERVICE'); before this existed no
+        // non-admin caller could satisfy that guard, so synchronous lookups such as
+        // chat-service resolving a conversation partner always failed with 403.
+        createRoleIfNotFound("ROLE_SERVICE", "Machine-to-machine service role");
 
         // Admin bootstrap is DISABLED by default.
         // In production, set APP_BOOTSTRAP_ADMIN_ENABLED=true and provide

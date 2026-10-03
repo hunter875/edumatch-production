@@ -42,7 +42,11 @@ public class UserController {
     private final UserCacheEvictionService userCacheEvictionService;
 
     @GetMapping("/user/me")
-    @PreAuthorize("hasAnyRole('USER', 'EMPLOYER')")
+    // ADMIN is included: this is a self endpoint that only ever returns the
+    // caller's own record, and chat-service resolves the connecting user through
+    // it. Excluding ADMIN made every chat request from an admin fail with 403 at
+    // this endpoint, which chat then reported as 503.
+    @PreAuthorize("hasAnyRole('USER', 'EMPLOYER', 'ADMIN')")
     public ResponseEntity<?> getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
@@ -93,7 +97,9 @@ public class UserController {
     }
 
     @PutMapping("/user/me")
-    @PreAuthorize("hasAnyRole('USER', 'EMPLOYER')")
+    // ADMIN is included for the same reason as GET: it edits only the caller's
+    // own record.
+    @PreAuthorize("hasAnyRole('USER', 'EMPLOYER', 'ADMIN')")
     public ResponseEntity<?> updateCurrentUser(@Valid @RequestBody UpdateProfileRequest request) {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
@@ -258,7 +264,8 @@ public class UserController {
      * POST /api/users/avatar
      */
     @PostMapping(value = "/users/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('USER', 'EMPLOYER')")
+    // ADMIN is included: it uploads only its own avatar.
+    @PreAuthorize("hasAnyRole('USER', 'EMPLOYER', 'ADMIN')")
     public ResponseEntity<?> uploadAvatar(@RequestParam("avatar") MultipartFile file) {
         try {
             Authentication authentication = SecurityContextHolder.getContext().getAuthentication();

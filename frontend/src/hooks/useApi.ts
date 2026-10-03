@@ -24,8 +24,12 @@ export const useLogin = () => {
   return useMutation({
     mutationFn: (credentials: LoginForm) => authApi.login(credentials),
     onSuccess: (data) => {
-      if (data.data?.token) {
-        localStorage.setItem('auth_token', data.data.token);
+      // apiCall returns the backend body directly; the field is `accessToken`.
+      // The previous `data.data?.token` never matched, so no token was stored
+      // and the session could not survive a reload.
+      const token = data?.accessToken;
+      if (token) {
+        localStorage.setItem('auth_token', token);
       }
       toast({
         type: 'success',
@@ -49,8 +53,9 @@ export const useRegister = () => {
   return useMutation({
     mutationFn: (userData: SignupForm) => authApi.register(userData),
     onSuccess: (data) => {
-      if (data.data?.token) {
-        localStorage.setItem('auth_token', data.data.token);
+      const token = data?.accessToken;
+      if (token) {
+        localStorage.setItem('auth_token', token);
       }
       toast({
         type: 'success',

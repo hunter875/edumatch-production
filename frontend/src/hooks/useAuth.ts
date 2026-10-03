@@ -46,7 +46,10 @@ export const useAuth = (): UseAuthReturn => {
       return;
     }
 
-    if (error || !currentUserData?.data) {
+    // useCurrentUser resolves to the backend body itself (apiCall does not wrap
+    // it in a `data` envelope), so the previous `currentUserData?.data` check
+    // always saw undefined and forced every visitor to signed-out.
+    if (error || !currentUserData) {
       setAuthState({
         user: null,
         profile: null,
@@ -57,22 +60,28 @@ export const useAuth = (): UseAuthReturn => {
       return;
     }
 
-    const profile = currentUserData.data;
+    const profile = currentUserData as unknown as Partial<UserProfile> & {
+      id?: number | string;
+      roles?: string[];
+      verified?: boolean;
+    };
 
     // Phần này của bạn đã RẤT TỐT!
     // Việc bạn có thể truy cập profile.email và profile.role
     // có nghĩa là bạn đã sửa file types/index.ts của mình
     const user: User = {
-      id: profile.id,
+      id: profile.id as never,
       email: profile.email || '', 
       name: [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.email || 'User',
-      role: profile.role || UserRole.USER,
+      // The profile payload reports roles as an array ("ROLE_USER"); fall back
+      // to the single-role field before defaulting.
+      role: (profile.roles?.[0]?.replace('ROLE_', '') || profile.role || UserRole.USER) as UserRole,
       status: 'ACTIVE',
       subscriptionType: 'FREE',
       emailVerified: profile.verified || false,
-      createdAt: profile.createdAt, 
-      updatedAt: profile.updatedAt, 
-      profile: profile, 
+      createdAt: profile.createdAt ?? new Date(),
+      updatedAt: profile.updatedAt ?? new Date(),
+      profile: profile as Partial<UserProfile>, 
     };
     
     setAuthState({

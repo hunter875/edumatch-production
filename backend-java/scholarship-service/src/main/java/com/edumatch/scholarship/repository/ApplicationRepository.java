@@ -22,9 +22,13 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
 
     Optional<Application> findFirstByApplicantUserIdAndOpportunityId(Long applicantUserId, Long opportunityId);
 
-    long countByStatus(String status);
+    // The status property is an ApplicationStatus enum, so the derived query
+    // parameter must be that enum. Declaring it as String made Spring Data bind a
+    // String to a typed parameter and fail with "Argument [PENDING] of type
+    // [java.lang.String] did not match parameter type [ApplicationStatus]".
+    long countByStatus(com.edumatch.scholarship.model.ApplicationStatus status);
 
-    long countByStatusIn(List<String> statuses);
+    long countByStatusIn(List<com.edumatch.scholarship.model.ApplicationStatus> statuses);
 
     // Lấy tất cả đơn nộp cho một cơ hội
     List<Application> findByOpportunityId(Long opportunityId);
@@ -109,6 +113,9 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
     );
 
     // Search applications với filter và pagination (cho admin)
+    // a.status is an ApplicationStatus enum, so :status must be that enum too;
+    // a String parameter made the comparison fail at runtime with
+    // "did not match parameter type [ApplicationStatus]".
     @Query("""
         SELECT a FROM Application a
         WHERE (:status IS NULL OR a.status = :status)
@@ -119,7 +126,7 @@ public interface ApplicationRepository extends JpaRepository<Application, Long> 
               CAST(a.id AS string) LIKE CONCAT(:keyword, '%'))
     """)
     Page<Application> searchApplications(
-            @Param("status") String status,
+            @Param("status") com.edumatch.scholarship.model.ApplicationStatus status,
             @Param("opportunityId") Long opportunityId,
             @Param("keyword") String keyword,
             Pageable pageable

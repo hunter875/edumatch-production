@@ -3,8 +3,8 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { AuthUser, AuthState, LoginCredentials, RegisterCredentials, UserRole } from '@/types';
 import { authService } from '@/services/auth.service';
-import { getFromLocalStorage, setToLocalStorage, removeFromLocalStorage } from '@/lib/utils';
-import { setCookie, getCookie, deleteCookie } from '@/lib/cookies';
+import { removeFromLocalStorage } from '@/lib/utils';
+import { deleteCookie } from '@/lib/cookies';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -13,7 +13,8 @@ interface AuthContextType {
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (credentials: RegisterCredentials) => Promise<void>;
   logout: () => Promise<void>;
-  refreshToken: () => Promise<void>;
+  /** Resolves with the new access token so callers can chain a request. */
+  refreshToken: () => Promise<string>;
   clearError: () => void;
   error: string | null;
 }
@@ -50,17 +51,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
   });
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize auth state from cookie existence + backend refresh
+  // Initialize auth state by attempting a refresh.
+  //
+  // The session cookies (refresh_token, auth_session) are HttpOnly by design so
+  // JavaScript cannot read them — which is exactly why this bootstrap must not
+  // try to. An earlier version guarded on getCookie('auth_token'), a cookie the
+  // backend never sets, so the guard always failed and the session was never
+  // restored after a reload. The only reliable signal is the refresh call
+  // itself: it carries the cookie and answers whether a session exists.
   useEffect(() => {
     let cancelled = false;
 
     async function bootstrap() {
-      const authCookie = getCookie('auth_token');
-      if (!authCookie) {
-        if (!cancelled) setAuthState(resetAuthState());
-        return;
-      }
-
       // Show loading until refresh attempt completes
       setAuthState(prev => ({ ...prev, isLoading: true }));
 
@@ -81,7 +83,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
         });
 
         if (!newToken || cancelled) {
-          // Refresh failed — clear session
+          // No session to restore. This is the normal anonymous case, not an
+          // error: clear any stale legacy markers and settle as signed out.
           tokenStore.clear();
           deleteCookie('auth_token');
           deleteCookie('auth_user');
@@ -98,11 +101,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
           });
           if (userRes.ok) {
             const userData = await userRes.json();
+            // The token carries roles ("ROLE_ADMIN"); the profile payload may
+            // report a single role. Prefer the highest-privilege role so an
+            // admin is not downgraded to USER on reload.
+            const rawRoles: string[] = Array.isArray(userData.roles)
+              ? userData.roles
+              : (userData.role ? [userData.role] : []);
+            const normalized = rawRoles.map((r: string) => String(r).replace('ROLE_', '').toUpperCase());
+            const primaryRole = normalized.includes('ADMIN') ? 'ADMIN'
+              : normalized.includes('EMPLOYER') ? 'EMPLOYER'
+              : normalized[0] || 'USER';
+
             const authUser = {
               id: String(userData.id),
               email: userData.email || userData.username,
-              name: userData.name || userData.username,
-              role: (userData.role || 'USER').toUpperCase(),
+              name: [userData.firstName, userData.lastName].filter(Boolean).join(' ')
+                || userData.name || userData.username,
+              role: primaryRole as UserRole,
               emailVerified: true,
               status: 'ACTIVE',
               subscriptionType: 'FREE',
@@ -114,7 +129,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
           }
         } catch (_) { /* fall through */ }
 
-        // User info fetch failed but token is valid
+        // Token is valid but the profile call failed; treat as signed in with an
+        // unknown role rather than dropping a live session.
         if (!cancelled) {
           setAuthState({
             user: null,
@@ -300,15 +316,36 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   };
 
+  /**
+   * Refresh the access token from the HttpOnly refresh cookie.
+   *
+   * This previously logged "not implemented yet", so the periodic refresh did
+   * nothing and every session died when the short-lived access token expired
+   * (15 minutes by default).
+   */
   const refreshToken = async () => {
-    try {
-      // TODO: Implement refresh token with real API
-      console.log('Token refresh not implemented yet');
-    } catch (err) {
-      // If refresh fails, logout user
+    const { tokenStore } = await import('@/lib/tokenStore');
+    const { API_ROOT } = await import('@/lib/api-config');
+
+    const newToken = await tokenStore.refreshOnce(async () => {
+      const res = await fetch(`${API_ROOT}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.accessToken || null;
+    });
+
+    if (!newToken) {
+      // The refresh cookie is gone or rejected: the session really is over.
       await logout();
-      throw err;
+      throw new Error('Session expired');
     }
+
+    tokenStore.setAccessToken(newToken);
+    return newToken;
   };
 
   const clearError = () => {

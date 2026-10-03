@@ -1,6 +1,8 @@
 package com.edumatch.scholarship.service;
 
 import com.edumatch.scholarship.dto.client.UserDetailDto;
+import com.edumatch.scholarship.model.ApplicationStatus;
+import com.edumatch.scholarship.model.ModerationStatus;
 import com.edumatch.scholarship.model.Opportunity;
 import com.edumatch.scholarship.repository.ApplicationRepository;
 import com.edumatch.scholarship.repository.OpportunityRepository;
@@ -51,8 +53,8 @@ public class ScholarshipAnalyticsService {
         Map<String, Long> statusCounts = getApplicationStatusCountsByCreator(creatorUserId);
 
         long totalScholarships = opportunities.size();
-        long activeScholarships = opportunityRepository.countByCreatorUserIdAndModerationStatus(creatorUserId, "APPROVED");
-        long pendingScholarships = opportunityRepository.countByCreatorUserIdAndModerationStatus(creatorUserId, "PENDING");
+        long activeScholarships = opportunityRepository.countByCreatorUserIdAndModerationStatus(creatorUserId, ModerationStatus.APPROVED);
+        long pendingScholarships = opportunityRepository.countByCreatorUserIdAndModerationStatus(creatorUserId, ModerationStatus.PENDING);
         long totalApplications = applicationCounts.values().stream().mapToLong(Long::longValue).sum();
         long acceptedApplications = sumStatuses(statusCounts, "ACCEPTED", "APPROVED");
         long rejectedApplications = sumStatuses(statusCounts, "REJECTED");
@@ -187,12 +189,15 @@ public class ScholarshipAnalyticsService {
     public Map<String, Object> getStats() {
         Map<String, Object> stats = new HashMap<>();
         long totalScholarships = opportunityRepository.count();
-        long activeScholarships = opportunityRepository.countByModerationStatus("APPROVED");
-        long pendingScholarships = opportunityRepository.countByModerationStatus("PENDING");
+        long activeScholarships = opportunityRepository.countByModerationStatus(ModerationStatus.APPROVED);
+        long pendingScholarships = opportunityRepository.countByModerationStatus(ModerationStatus.PENDING);
         long totalApplications = applicationRepository.count();
-        long pendingApplications = applicationRepository.countByStatusIn(List.of("PENDING", "SUBMITTED", "UNDER_REVIEW"));
-        long acceptedApplications = applicationRepository.countByStatus("ACCEPTED");
-        long rejectedApplications = applicationRepository.countByStatus("REJECTED");
+        // ApplicationStatus has no SUBMITTED value; the previous list named one,
+        // which would have thrown at runtime even once the parameter type matched.
+        long pendingApplications = applicationRepository.countByStatusIn(List.of(
+                ApplicationStatus.PENDING, ApplicationStatus.UNDER_REVIEW, ApplicationStatus.WAITLISTED));
+        long acceptedApplications = applicationRepository.countByStatus(ApplicationStatus.ACCEPTED);
+        long rejectedApplications = applicationRepository.countByStatus(ApplicationStatus.REJECTED);
 
         stats.put("totalScholarships", totalScholarships);
         stats.put("activeScholarships", activeScholarships);
