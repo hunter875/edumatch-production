@@ -1,6 +1,7 @@
 package com.edumatch.scholarship.service;
 
 import com.edumatch.scholarship.dto.client.UserDetailDto;
+import com.edumatch.scholarship.model.ApplicationStatus;
 import com.edumatch.scholarship.model.ModerationStatus;
 import com.edumatch.scholarship.model.Opportunity;
 import com.edumatch.scholarship.repository.ApplicationRepository;
@@ -191,9 +192,12 @@ public class ScholarshipAnalyticsService {
         long activeScholarships = opportunityRepository.countByModerationStatus(ModerationStatus.APPROVED);
         long pendingScholarships = opportunityRepository.countByModerationStatus(ModerationStatus.PENDING);
         long totalApplications = applicationRepository.count();
-        long pendingApplications = applicationRepository.countByStatusIn(List.of("PENDING", "SUBMITTED", "UNDER_REVIEW"));
-        long acceptedApplications = applicationRepository.countByStatus("ACCEPTED");
-        long rejectedApplications = applicationRepository.countByStatus("REJECTED");
+        // ApplicationStatus has no SUBMITTED value; the previous list named one,
+        // which would have thrown at runtime even once the parameter type matched.
+        long pendingApplications = applicationRepository.countByStatusIn(List.of(
+                ApplicationStatus.PENDING, ApplicationStatus.UNDER_REVIEW, ApplicationStatus.WAITLISTED));
+        long acceptedApplications = applicationRepository.countByStatus(ApplicationStatus.ACCEPTED);
+        long rejectedApplications = applicationRepository.countByStatus(ApplicationStatus.REJECTED);
 
         stats.put("totalScholarships", totalScholarships);
         stats.put("activeScholarships", activeScholarships);

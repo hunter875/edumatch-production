@@ -469,10 +469,22 @@ public class ApplicationService {
             Long opportunityId,
             String keyword,
             org.springframework.data.domain.Pageable pageable) {
-        
+
+        // The repository filter takes an ApplicationStatus enum. An unrecognised
+        // value is treated as "no filter" rather than passed through, because a
+        // bad string previously reached the query and failed at runtime.
+        ApplicationStatus statusFilter = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                statusFilter = ApplicationStatus.valueOf(status.trim().toUpperCase());
+            } catch (IllegalArgumentException ignored) {
+                statusFilter = null;
+            }
+        }
+
         // Lấy applications với filter
         org.springframework.data.domain.Page<Application> page = applicationRepository.searchApplications(
-                status, opportunityId, normalizeSearchKeyword(keyword), pageable);
+                statusFilter, opportunityId, normalizeSearchKeyword(keyword), pageable);
         List<Application> applications = page.getContent();
         Map<Long, List<ApplicationDocument>> docsByApplicationId = getDocumentsByApplicationId(applications);
         List<Long> opportunityIds = applications.stream()
