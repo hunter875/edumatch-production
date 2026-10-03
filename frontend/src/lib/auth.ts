@@ -13,7 +13,8 @@ interface AuthContextType {
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (credentials: RegisterCredentials) => Promise<void>;
   logout: () => Promise<void>;
-  refreshToken: () => Promise<void>;
+  /** Resolves with the new access token so callers can chain a request. */
+  refreshToken: () => Promise<string>;
   clearError: () => void;
   error: string | null;
 }

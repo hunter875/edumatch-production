@@ -60,7 +60,11 @@ export const useAuth = (): UseAuthReturn => {
       return;
     }
 
-    const profile = currentUserData as unknown as Partial<UserProfile> & { id?: number | string; role?: string };
+    const profile = currentUserData as unknown as Partial<UserProfile> & {
+      id?: number | string;
+      roles?: string[];
+      verified?: boolean;
+    };
 
     // Phần này của bạn đã RẤT TỐT!
     // Việc bạn có thể truy cập profile.email và profile.role
@@ -69,14 +73,14 @@ export const useAuth = (): UseAuthReturn => {
       id: profile.id as never,
       email: profile.email || '', 
       name: [profile.firstName, profile.lastName].filter(Boolean).join(' ') || profile.email || 'User',
-      // The profile payload reports roles as an array ("ROLE_USER"); the token
-      // does the same. Fall back through both shapes before defaulting.
-      role: ((profile as { roles?: string[] }).roles?.[0]?.replace('ROLE_', '') || profile.role || UserRole.USER) as UserRole,
+      // The profile payload reports roles as an array ("ROLE_USER"); fall back
+      // to the single-role field before defaulting.
+      role: (profile.roles?.[0]?.replace('ROLE_', '') || profile.role || UserRole.USER) as UserRole,
       status: 'ACTIVE',
       subscriptionType: 'FREE',
       emailVerified: profile.verified || false,
-      createdAt: profile.createdAt, 
-      updatedAt: profile.updatedAt, 
+      createdAt: profile.createdAt ?? new Date(),
+      updatedAt: profile.updatedAt ?? new Date(),
       profile: profile as Partial<UserProfile>, 
     };
     

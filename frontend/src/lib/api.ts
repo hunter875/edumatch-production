@@ -57,10 +57,19 @@ const getAuthHeaders = (): HeadersInit => {
 // Generic API call function with timeout, FormData support, and standardized errors
 const DEFAULT_TIMEOUT_MS = 15000;
 
+/**
+ * Perform a request and return the parsed response body.
+ *
+ * The return type is T, not ApiResponse<T>: this function returns the backend
+ * body verbatim (the `return data;` below) and does not wrap it. The previous
+ * annotation claimed an envelope that was never produced, so callers wrote
+ * `result.data.x` against a value that had no `data` property and always read
+ * undefined.
+ */
 async function apiCall<T = any>(
   endpoint: string,
   options: RequestInit = {}
-): Promise<ApiResponse<T>> {
+): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
 
   // Detect FormData body — must NOT set Content-Type so browser can add multipart boundary
