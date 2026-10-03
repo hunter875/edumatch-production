@@ -125,17 +125,22 @@ export class ApiError extends Error {
 }
 
 // Auth API
+//
+// The declared response types mirror the backend contract: /api/auth/login and
+// /api/auth/register answer { accessToken, tokenType }. An earlier declaration
+// promised { user, token }, which never matched and let callers read fields that
+// could not exist.
 export const authApi = {
   // Login user
   login: (credentials: LoginForm) =>
-    apiCall<{ user: UserProfile; token: string }>('/auth/login', {
+    apiCall<{ accessToken: string; tokenType: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(credentials),
     }),
 
   // Register user
   register: (userData: SignupForm) =>
-    apiCall<{ user: UserProfile; token: string }>('/auth/register', {
+    apiCall<{ accessToken: string; tokenType: string }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(userData),
     }),
