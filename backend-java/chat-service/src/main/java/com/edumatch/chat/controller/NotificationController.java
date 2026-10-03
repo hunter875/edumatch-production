@@ -63,4 +63,32 @@ public class NotificationController {
         // Đánh dấu đã đọc (Logic nằm trong ChatService)
         chatService.markNotificationAsRead(notificationId, authentication);
     }
+
+    /**
+     * API: GET /api/notifications/unread-count
+     *
+     * The frontend read this value for its badge, but the endpoint did not exist
+     * and the request fell through to the resource handler as a 500.
+     */
+    @GetMapping("/unread-count")
+    public ResponseEntity<Map<String, Object>> getUnreadCount(Authentication authentication) {
+        long count = chatService.countUnreadNotifications(authentication);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("count", count);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * API: POST /api/notifications/read-all
+     *
+     * Marks every unread notification of the caller as read and reports how many
+     * rows changed, so the caller can reconcile its badge without refetching.
+     */
+    @PostMapping("/read-all")
+    public ResponseEntity<Map<String, Object>> markAllAsRead(Authentication authentication) {
+        int updated = chatService.markAllNotificationsAsRead(authentication);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("updated", updated);
+        return ResponseEntity.ok(response);
+    }
 }

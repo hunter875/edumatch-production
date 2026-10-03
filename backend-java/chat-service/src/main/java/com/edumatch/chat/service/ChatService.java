@@ -465,4 +465,36 @@ public class ChatService {
         notificationRepository.save(notification);
         log.info("Notification {} của User {} đã được đánh dấu là đã đọc.", notificationId, currentUserId);
     }
+
+    /**
+     * (Logic cho API: GET /api/notifications/unread-count)
+     *
+     * Counts only the caller's own unread notifications; identity comes from the
+     * presented token, the same way markNotificationAsRead resolves it.
+     */
+    @Transactional(readOnly = true)
+    public long countUnreadNotifications(Authentication authentication) {
+        UserDetailDto user = getUserDetailsFromAuthService(
+                authentication.getName(),
+                (String) authentication.getCredentials()
+        );
+        return notificationRepository.countByUserIdAndIsReadFalse(user.getId());
+    }
+
+    /**
+     * (Logic cho API: POST /api/notifications/read-all)
+     *
+     * Marks every unread notification of the caller as read and returns how many
+     * rows were updated.
+     */
+    @Transactional
+    public int markAllNotificationsAsRead(Authentication authentication) {
+        UserDetailDto user = getUserDetailsFromAuthService(
+                authentication.getName(),
+                (String) authentication.getCredentials()
+        );
+        int updated = notificationRepository.markAllReadByUserId(user.getId());
+        log.info("Marked {} notifications as read for user {}.", updated, user.getId());
+        return updated;
+    }
 }

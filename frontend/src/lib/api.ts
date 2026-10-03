@@ -186,19 +186,25 @@ export const authApi = {
 };
 
 // Users API
+//
+// The only self endpoints the backend exposes are GET/PUT /api/user/me. The
+// previous paths here (/users/profile, /users/account, /users/{id}) had no
+// handler, so every profile read and write answered 500 from the resource
+// handler fallback.
 export const usersApi = {
-  // Get user profile
-  getProfile: (userId?: string) =>
-    apiCall<UserProfile>(userId ? `/users/${userId}` : '/users/profile'),
+  // Get the authenticated user's own record. `userId` is accepted for callers
+  // that still pass it, but the backend resolves identity from the token.
+  getProfile: (_userId?: string) =>
+    apiCall<UserProfile>('/user/me'),
 
-  // Update user profile
+  // Update the authenticated user's own record
   updateProfile: (profileData: Partial<ProfileForm>) =>
-    apiCall<UserProfile>('/users/profile', {
+    apiCall<UserProfile>('/user/me', {
       method: 'PUT',
       body: JSON.stringify(profileData),
     }),
 
-  // Upload avatar
+  // Upload avatar. The backend exposes this at /api/users/avatar.
   uploadAvatar: (file: File) => {
     const formData = new FormData();
     formData.append('avatar', file);
@@ -210,11 +216,14 @@ export const usersApi = {
     });
   },
 
-  // Delete account
-  deleteAccount: () =>
-    apiCall('/users/account', {
-      method: 'DELETE',
-    }),
+  // Delete account.
+  //
+  // The backend has no self-deletion endpoint: /api/users/account was never
+  // implemented. Admin deletion exists as DELETE /api/admin/users/{id}. Rather
+  // than call a path that does not exist and surface a 500, this states the gap.
+  deleteAccount: async (): Promise<never> => {
+    throw new Error('Account deletion is not available: the backend exposes no self-deletion endpoint.');
+  },
 };
 
 // Scholarships API
@@ -356,26 +365,29 @@ export const applicationsApi = {
 // Notifications API
 export const notificationsApi = {
   // Get notifications
-  getNotifications: (page = 1, limit = 20) =>
-    apiCall<PaginatedResponse<Notification>>(`/notifications?page=${page}&limit=${limit}`),
+  getNotifications: (page = 0, limit = 20) =>
+    apiCall<PaginatedResponse<Notification>>(`/notifications?page=${page}&size=${limit}`),
 
-  // Mark notification as read
+  // Mark notification as read.
+  // The backend maps this as PATCH /api/notifications/{id}/read and answers 204;
+  // the previous call used PUT against a path with no handler.
   markAsRead: (id: string) =>
     apiCall(`/notifications/${id}/read`, {
-      method: 'PUT',
+      method: 'PATCH',
     }),
 
   // Mark all notifications as read
   markAllAsRead: () =>
     apiCall('/notifications/read-all', {
-      method: 'PUT',
+      method: 'POST',
     }),
 
-  // Delete notification
-  deleteNotification: (id: string) =>
-    apiCall(`/notifications/${id}`, {
-      method: 'DELETE',
-    }),
+  // Delete notification.
+  // The backend exposes no delete endpoint for notifications, so this reports the
+  // gap instead of calling a path that does not exist.
+  deleteNotification: async (_id: string): Promise<never> => {
+    throw new Error('Deleting a notification is not available: the backend exposes no such endpoint.');
+  },
 
   // Get unread count
   getUnreadCount: () =>
