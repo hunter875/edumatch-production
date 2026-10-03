@@ -1,3 +1,5 @@
+import { tokenStore } from '@/lib/tokenStore';
+
 export const API_GATEWAY_URL =
   process.env.NEXT_PUBLIC_API_GATEWAY ||
   process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -20,15 +22,18 @@ const getCookieValue = (name: string): string | null => {
   return cookieValue ? decodeURIComponent(cookieValue) : null;
 };
 
+/**
+ * Read the in-memory access token.
+ *
+ * `require` is not defined in the client bundle's ESM scope, so the previous
+ * implementation silently fell into its catch block every time and this
+ * function always returned null — meaning no request ever carried a bearer
+ * token. The token store is imported statically instead, which the bundler
+ * resolves at build time.
+ */
 export const getAuthToken = (): string | null => {
   if (typeof window === 'undefined') return null;
-  try {
-    const { tokenStore } = require('@/lib/tokenStore');
-    const memToken = tokenStore.getAccessToken();
-    if (memToken) return memToken;
-  } catch (_) { /* module not yet loaded */ }
-  // No fallback to localStorage — bearer tokens live in memory only
-  return null;
+  return tokenStore.getAccessToken();
 };
 
 export const getAuthHeaders = (contentType: string | null = 'application/json'): HeadersInit => {
@@ -69,9 +74,22 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}): Promise
   }
 }
 
+/**
+ * Perform a request, recovering the session once if the token is not ready yet.
+ *
+ * The access token lives in memory only, so on a fresh page load it is absent
+ * until the auth bootstrap completes its refresh. A page that fetches on mount
+ * (the profile page does) therefore raced the bootstrap and sent no
+ * Authorization header, producing a 401 that surfaced as an empty profile.
+ *
+ * Instead of making every caller wait for auth state, one 401 triggers a single
+ * cookie-based refresh and the request is retried. `refreshOnce` is
+ * single-flight, so concurrent 401s cause one refresh, not one each.
+ */
 export async function apiRequest<T = any>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  _retried = false
 ): Promise<T> {
   const url = endpoint.startsWith('http')
     ? endpoint
@@ -86,6 +104,13 @@ export async function apiRequest<T = any>(
       ...options.headers,
     },
   });
+
+  if (response.status === 401 && !_retried) {
+    const recovered = await refreshAccessTokenOnce();
+    if (recovered) {
+      return apiRequest<T>(endpoint, options, true);
+    }
+  }
 
   const contentType = response.headers.get('content-type');
   let data: any = {};
@@ -102,6 +127,29 @@ export async function apiRequest<T = any>(
   }
 
   return data as T;
+}
+
+/**
+ * Exchange the HttpOnly refresh cookie for a new access token.
+ * Single-flight so a burst of 401s cannot stampede the auth service.
+ */
+async function refreshAccessTokenOnce(): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  try {
+    const { tokenStore } = await import('@/lib/tokenStore');
+    return await tokenStore.refreshOnce(async () => {
+      const res = await fetch(`${API_ROOT}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+      if (!res.ok) return null;
+      const body = await res.json();
+      return body.accessToken || null;
+    });
+  } catch (_) {
+    return null;
+  }
 }
 
 export function buildRepeatedQueryParam(name: string, values: Array<string | number>): string {

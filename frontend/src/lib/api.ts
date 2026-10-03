@@ -14,6 +14,7 @@ import {
   Conversation
 } from '@/types';
 import { API_PREFIX } from '@/lib/api-config';
+import { tokenStore } from '@/lib/tokenStore';
 
 // API Configuration
 // Use relative path for production (works with nginx proxy)
@@ -28,16 +29,14 @@ const defaultOptions: RequestInit = {
   credentials: 'include', // Include cookies for authentication
 };
 
-// Helper function to get auth token from in-memory store only
+// Helper function to get auth token from the in-memory store only.
+//
+// `require` does not exist in the client bundle's ESM scope, so the previous
+// version always threw and returned null: no request from this module ever
+// carried a bearer token. Static import lets the bundler resolve it.
 const getAuthToken = (): string | null => {
   if (typeof window === 'undefined') return null;
-  try {
-    const { getAccessToken } = require('@/services/auth.service');
-    const memToken = getAccessToken();
-    if (memToken) return memToken;
-  } catch (_) { /* module not available */ }
-  // No localStorage fallback — bearer tokens are in memory only
-  return null;
+  return tokenStore.getAccessToken();
 };
 
 // Helper function to create authenticated headers
