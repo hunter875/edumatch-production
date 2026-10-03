@@ -97,7 +97,21 @@ def decode_jwt_token(token: str) -> dict:
         else:
             algorithms = [settings.JWT_ALGORITHM]
 
-        payload = jwt.decode(token, key, algorithms=algorithms)
+        # Pass the expected audience explicitly.
+        #
+        # PyJWT 2.15.1 rejects any token carrying an `aud` claim when the caller
+        # does not state an expected audience ("Application did not specify an
+        # audience, but the token has the 'aud' claim"). Every token this service
+        # receives has `aud`, so omitting the argument rejected all of them with
+        # InvalidAudienceError before the local checks below could run. Supplying
+        # it lets PyJWT perform the comparison instead of only the manual check.
+        payload = jwt.decode(
+            token,
+            key,
+            algorithms=algorithms,
+            audience=settings.JWT_EXPECTED_AUDIENCE,
+            issuer=settings.JWT_EXPECTED_ISSUER,
+        )
 
         # Validate issuer — MUST be present and correct
         expected_iss = settings.JWT_EXPECTED_ISSUER
