@@ -14,9 +14,16 @@ export function middleware(request: NextRequest) {
     pathname.startsWith(route) && !pathname.includes('/applications')
   );
 
-  // Check if user has an auth session cookie (existence only, NOT for role)
-  const authCookie = request.cookies.get('auth_token')?.value;
-  const isAuthenticated = !!authCookie;
+  // Session presence is decided by the auth_session cookie.
+  //
+  // Earlier versions read `auth_token`, a cookie the backend never sets — the
+  // session cookies are `refresh_token` (Path=/api/auth) and `auth_session`
+  // (Path=/). Because `auth_token` was always absent, every protected route was
+  // treated as signed out and redirected to /auth/login, so a user who had just
+  // signed in still could not open their profile. `auth_session` is the one
+  // scoped to the whole site, so it is the one visible on these navigations.
+  const hasSessionMarker = Boolean(request.cookies.get('auth_session')?.value);
+  const isAuthenticated = hasSessionMarker;
 
   // NOTE: We do NOT read auth_user cookie for role decisions.
   // Backend enforces authorization; middleware only checks authentication presence
