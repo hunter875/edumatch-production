@@ -64,8 +64,27 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.SERVICE_UNAVAILABLE, "DOWNSTREAM_UNAVAILABLE", "Service temporarily unavailable", request);
     }
 
+    /**
+     * An unmapped path is a client error, not a server fault.
+     *
+     * Spring raises NoResourceFoundException when no handler matches. Without
+     * this handler it fell through to the catch-all and every unknown path
+     * answered 500, which both misleads the caller and pollutes error rates.
+     */
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<ApiError> handleNoResource(
+            org.springframework.web.servlet.resource.NoResourceFoundException ex,
+            HttpServletRequest request) {
+        log.warn("No handler for {} {}", request.getMethod(), request.getRequestURI());
+        return build(HttpStatus.NOT_FOUND, "NOT_FOUND", "Resource not found", request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
+        // Log the cause before answering. Without this the handler swallowed every
+        // unexpected failure and returned a bare "Unexpected server error.", so a
+        // 500 left no stack trace anywhere and could not be diagnosed.
+        log.error("Unhandled exception on {} {}", request.getMethod(), request.getRequestURI(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Unexpected server error.", request);
     }
 
