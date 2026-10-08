@@ -140,10 +140,17 @@ public class OpportunityQueryService {
     @Transactional(readOnly = true)
     public Page<OpportunityDto> getAllOpportunitiesForAdmin(String status, String keyword, Pageable pageable) {
         String normalizedKeyword = collectionService.normalizeSearchKeyword(keyword);
+        // "ALL" is the conventional "no filter" value a client sends when the
+        // admin clears the status selector. It is not a moderation status, so
+        // matching it literally returned zero rows while the unfiltered list
+        // held every record. Treat it as absent instead of as a value.
+        String normalizedStatus = (status == null || status.isBlank() || "ALL".equalsIgnoreCase(status.trim()))
+                ? null
+                : status.trim();
         Specification<Opportunity> spec = (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
-            if (status != null && !status.isEmpty()) {
-                predicates.add(criteriaBuilder.equal(root.get("moderationStatus"), status));
+            if (normalizedStatus != null) {
+                predicates.add(criteriaBuilder.equal(root.get("moderationStatus"), normalizedStatus));
             }
             if (normalizedKeyword != null) {
                 predicates.add(criteriaBuilder.like(root.get("title"), normalizedKeyword + "%"));
