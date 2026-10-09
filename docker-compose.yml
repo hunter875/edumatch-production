@@ -48,7 +48,10 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M # MySQL test instance thường chỉ cần tầm này
+          memory: 768M # Ở 384M container chạm 99% trần và mysqld bị kernel
+                       # OOM-kill khi seed dữ liệu lớn (dmesg: anon-rss 384560kB
+                       # vs limit 402653184B). Chỉ nới trần, InnoDB buffer pool
+                       # giữ nguyên 128M.
         reservations:
           memory: 128M
 
@@ -77,7 +80,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 768M # Nâng từ 384M: mysqld bị kernel OOM-kill khi seed 10k
+                       # opportunity (dmesg anon-rss 383896kB). Limit 384M chỉ
+                       # còn ~3 MiB trống khi idle.
         reservations:
           memory: 128M
 
@@ -370,7 +375,13 @@ services:
       - LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_SECURITY=INFO
       - LOGGING_LEVEL_COM_EDUMATCH_SCHOLARSHIP=INFO
       # Giới hạn JVM
-      - JAVA_TOOL_OPTIONS=-javaagent:/opt/applicationinsights-agent.jar -XX:InitialRAMPercentage=20.0 -XX:MaxRAMPercentage=70.0 -Dfile.encoding=UTF-8
+      # KHÔNG dùng MaxRAMPercentage ở đây. Cgroup limit áp lên TỔNG RSS
+      # (heap + metaspace + code cache + thread stack + direct buffer), không
+      # chỉ heap. Với limit 400M, MaxRAMPercentage=70 cấp ~280M cho heap, cộng
+      # thêm ~158M non-heap là ~438M — vượt trần và kernel OOM-kill JVM dưới tải
+      # (đã xác nhận bằng dmesg: anon-rss 403736kB vs limit 419430400B).
+      # Đặt heap tường minh và chừa chỗ cho phần ngoài heap.
+      - JAVA_TOOL_OPTIONS=-Xmx256m -Xss512k -XX:MaxMetaspaceSize=192m -Dfile.encoding=UTF-8
     depends_on:
       scholarship-db:
         condition: service_healthy
@@ -389,9 +400,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 400M
+          memory: 768M
         reservations:
-          memory: 200M
+          memory: 256M
 
   # === CHAT SERVICE (Java - Port 8083) ===
   chat-service:
@@ -454,7 +465,11 @@ services:
     deploy:
       resources:
         limits:
-          memory: 400M
+          memory: 768M # Nâng từ 400M: đo được memory.current 396.0/400 MiB
+                       # (99.0%) dưới tải 25 concurrent — biên an toàn ~4 MiB.
+                       # Cùng MaxRAMPercentage=70.0 với limit 400M cho heap tối
+                       # đa 280M, cộng non-heap ~167M là vượt trần.
+                       # CHƯA OOM, chỉ nới trần phòng ngừa; JVM flags giữ nguyên.
         reservations:
           memory: 200M
 
@@ -483,7 +498,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 768M # Nâng từ 384M cùng lý do với scholarship-db: cả ba MySQL
+                       # đều chạm ~99% trần khi idle. Chỉ nới trần.
         reservations:
           memory: 128M
 

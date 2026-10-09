@@ -86,7 +86,40 @@ class OutboxPublisherTest {
         assertThat(event.getStatus()).isEqualTo(OutboxEvent.STATUS_PENDING);
         assertThat(event.getAttempts()).isEqualTo(1);
         assertThat(event.getNextAttemptAt()).isAfter(LocalDateTime.now().minusSeconds(1));
-        assertThat(event.getLastError()).isEqualTo("broker unavailable");
+        // last_error now names the exception class as well as its message, so a
+        // timeout (whose getMessage() is null) is distinguishable from an AMQP
+        // failure. Assert on the parts that must be present rather than on an
+        // exact string.
+        assertThat(event.getLastError()).contains("AmqpException");
+        assertThat(event.getLastError()).contains("broker unavailable");
+    }
+
+    @Test
+    void confirmTimeoutRecordsTheExceptionTypeAndNotANullMessage() {
+        OutboxEvent event = outboxEvent("{\"applicationId\":42}");
+        when(outboxEventRepository.findTop100PendingForUpdate(any(LocalDateTime.class)))
+                .thenReturn(List.of(event));
+        // TimeoutException cannot be thrown from convertAndSend (it declares no
+        // checked exceptions); it is thrown by the confirm-future wait. It does
+        // not implement the AMQP exception hierarchy either, so the publisher
+        // reaches markFailed through its generic Exception branch. Emulate that
+        // by returning a CorrelationData whose future completes exceptionally,
+        // which is what the staging run actually experienced.
+        doAnswer(invocation -> {
+            CorrelationData cd = invocation.getArgument(3);
+            cd.getFuture().completeExceptionally(new java.util.concurrent.TimeoutException());
+            return null;
+        }).when(rabbitTemplate)
+          .convertAndSend(anyString(), anyString(), any(Object.class), any(CorrelationData.class));
+
+        outboxPublisher.publishPendingEvents();
+
+        assertThat(event.getLastError()).isNotNull();
+        assertThat(event.getLastError()).contains("TimeoutException");
+        // The timeout arrives wrapped in ExecutionException; the classifier must
+        // unwrap it, otherwise the diagnostic never mentions the confirm wait.
+        assertThat(event.getLastError()).contains("confirm");
+        assertThat(event.getLastError()).isNotEqualTo("null");
     }
 
     @Test
