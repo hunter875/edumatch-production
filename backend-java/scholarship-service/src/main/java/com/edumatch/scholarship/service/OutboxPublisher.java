@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Service
 @ConditionalOnBean(RabbitTemplate.class)
@@ -77,7 +78,11 @@ public class OutboxPublisher {
     private void markFailed(OutboxEvent event, Exception ex, boolean retryable) {
         int attempts = event.getAttempts() + 1;
         event.setAttempts(attempts);
-        event.setLastError(truncate(ex.getMessage()));
+        // Record the exception CLASS alongside the message. TimeoutException
+        // carries a null message, so relying on getMessage() alone produced
+        // rows with last_error = NULL that said nothing about the cause.
+        String detail = describe(ex);
+        event.setLastError(truncate(detail));
 
         if (!retryable || attempts >= MAX_ATTEMPTS) {
             event.setStatus(OutboxEvent.STATUS_FAILED);
@@ -86,7 +91,7 @@ public class OutboxPublisher {
                     event.getId(),
                     event.getRoutingKey(),
                     attempts,
-                    ex.getMessage(),
+                    detail,
                     ex
             );
         } else {
@@ -96,11 +101,56 @@ public class OutboxPublisher {
                     event.getId(),
                     event.getRoutingKey(),
                     delaySeconds,
-                    ex.getMessage()
+                    detail
             );
         }
 
         outboxEventRepository.save(event);
+    }
+
+    /**
+     * Build a diagnostic string that is never null and always names the failure
+     * type, so a timeout is distinguishable from a nack, a returned message, a
+     * serialisation error or a connection failure.
+     *
+     * <p>The confirm wait surfaces a timeout wrapped in
+     * {@link ExecutionException}, so the chain is unwrapped before classifying:
+     * testing {@code ex instanceof TimeoutException} on the outer exception
+     * alone would miss the case this method exists to explain.
+     */
+    private String describe(Exception ex) {
+        Throwable root = ex;
+        while ((root instanceof java.util.concurrent.ExecutionException
+                || root instanceof java.util.concurrent.CompletionException)
+                && root.getCause() != null) {
+            root = root.getCause();
+        }
+
+        StringBuilder sb = new StringBuilder(ex.getClass().getSimpleName());
+        String message = ex.getMessage();
+        if (message != null && !message.isBlank()) {
+            sb.append(": ").append(message);
+        }
+        // TimeoutException has no message; say what it timed out on.
+        if (root instanceof TimeoutException) {
+            sb.append(" (no broker confirm within ")
+              .append(publisherConfirmTimeoutMs)
+              .append("ms; the broker may have accepted the message without confirming)");
+        }
+        if (root != ex) {
+            sb.append(" | rootCause=").append(root.getClass().getSimpleName());
+            if (root.getMessage() != null && !root.getMessage().isBlank()) {
+                sb.append(": ").append(root.getMessage());
+            }
+        }
+        Throwable cause = ex.getCause();
+        if (cause != null && cause != ex && cause != root) {
+            sb.append(" | cause=").append(cause.getClass().getSimpleName());
+            if (cause.getMessage() != null && !cause.getMessage().isBlank()) {
+                sb.append(": ").append(cause.getMessage());
+            }
+        }
+        return sb.toString();
     }
 
     private Object payloadWithEventId(OutboxEvent event) throws JsonProcessingException {

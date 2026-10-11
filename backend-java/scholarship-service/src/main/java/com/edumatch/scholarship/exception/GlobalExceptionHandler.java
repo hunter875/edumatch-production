@@ -79,6 +79,23 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, "NOT_FOUND", "Resource not found", request);
     }
 
+    /**
+     * A wrong HTTP method is a client error, not a server fault.
+     *
+     * Spring raises HttpRequestMethodNotSupportedException when the path matches
+     * a mapping but the verb does not. Without this handler it fell through to
+     * the catch-all and answered 500, so calling POST on a GET-only route looked
+     * like a crashed server and fired 5xx alerts on ordinary misuse.
+     */
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiError> handleMethodNotSupported(
+            org.springframework.web.HttpRequestMethodNotSupportedException ex,
+            HttpServletRequest request) {
+        log.warn("Method {} not allowed for {}", request.getMethod(), request.getRequestURI());
+        return build(HttpStatus.METHOD_NOT_ALLOWED, "METHOD_NOT_ALLOWED",
+                "Method " + request.getMethod() + " is not supported for this endpoint.", request);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
         // Log the cause before answering. Without this the handler swallowed every
